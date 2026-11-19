@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fbfaf7" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%231a1a18'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23f4f3ef' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%232d6a3e'/%3E%3C/svg%3E" />
+    <title>Camera Link · Studio</title>
+    <link rel="stylesheet" href="/src/control.css" />
+  </head>
+  <body>
+    <div class="studio-shell">
+      <header class="studio-header">
+        <a class="studio-brand logo" href="/control">camera link <span>· studio</span></a>
+        <div class="header-actions">
+          <span id="connection-status" class="status-chip"><i aria-hidden="true"></i><span>Waiting for iPhone</span></span>
+          <button id="show-connection" type="button" class="secondary-button">Connect iPhone</button>
+          <button id="header-settings" type="button" class="secondary-button" aria-haspopup="dialog">Settings</button>
+          <button id="open-obs" type="button" class="secondary-button">OBS source</button>
+        </div>
+      </header>
+
+      <main class="studio-layout">
+        <section class="preview-column">
+          <div class="window">
+            <div class="window-bar">
+              <span class="window-title kicker">Live preview · iPhone</span>
+              <span class="preview-topline"><span id="transport-badge" class="transport-badge">NO SIGNAL</span><span id="preview-resolution">— × —</span></span>
+            </div>
+            <div class="preview-frame">
+              <canvas id="preview" title="Click to focus (when Focus is Continuous)"></canvas>
+              <div id="focus-ring" class="focus-ring" aria-hidden="true"></div>
+              <div id="waiting" class="waiting-overlay">
+                <div class="pulse-ring"></div>
+                <span class="kicker">No signal</span>
+                <strong>Camera is offline</strong>
+                <span>Open the local sender URL on your iPhone</span>
+                <button id="waiting-connect" class="primary-button">Show connection links</button>
+              </div>
+            </div>
+          </div>
+          <div id="health-banner" class="health-banner" role="status" hidden>
+            <div><strong id="health-title"></strong><small id="health-detail"></small></div>
+            <button id="health-action" type="button" class="primary-button"></button>
+            <button id="health-dismiss" type="button" aria-label="Dismiss warning">×</button>
+          </div>
+          <div id="hold-banner" class="health-banner hold-banner" role="status" hidden>
+            <div><strong id="hold-banner-title"></strong><small id="hold-banner-detail"></small></div>
+            <button id="hold-banner-action" type="button" class="primary-button"></button>
+          </div>
+          <div class="telemetry-grid">
+            <div><span>Transport</span><strong id="metric-transport">—</strong><small>active route</small></div>
+            <div><span>Round trip</span><strong id="metric-rtt">— ms</strong><small>WebSocket ping</small></div>
+            <div><span>Video input</span><strong id="metric-bitrate"><span id="metric-bitrate-value">0.0</span> <em>Mbps</em></strong><small>at PC relay</small></div>
+            <div><span>Frame rate</span><strong id="metric-fps"><span id="metric-fps-value">0</span> <em>FPS</em></strong><small id="metric-queue">decoder queue 0</small></div>
+            <div><span>Decoded</span><strong id="metric-decoded">0</strong><small>frames this session</small></div>
+            <div><span>Dropped</span><strong id="metric-dropped">0</strong><small>decoder + transport</small></div>
+          </div>
+          <div class="preview-actions">
+            <button id="force-keyframe" type="button" class="primary-button" disabled>Force keyframe <kbd>K</kbd></button>
+            <button id="audio-monitor" type="button" class="secondary-button" aria-pressed="false">Preview audio: off</button>
+            <span id="audio-status" class="audio-status" data-level="idle">iPhone mic off</span>
+            <span>Changes are applied directly on the iPhone.</span>
+          </div>
+        </section>
+
+        <aside class="control-panel">
+          <div class="panel-heading">
+            <div><span class="kicker">Remote control</span><h2>Camera</h2></div>
+            <i id="remote-dot" aria-hidden="true"></i>
+          </div>
+
+          <section class="control-section">
+            <div class="section-title">Capture</div>
+            <div class="group">
+              <label class="row" for="remote-lens"><span class="row-label">Lens</span><select id="remote-lens" disabled><option>Waiting for camera</option></select></label>
+              <div class="camera-modes">
+                <button id="remote-torch" type="button" class="row switch-row" aria-pressed="false" disabled><span>OFF</span><b class="row-label">Torch</b></button>
+                <button id="remote-mic" type="button" class="row switch-row" aria-pressed="false" disabled><span>OFF</span><b class="row-label">iPhone mic</b></button>
+              </div>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <div class="section-title">Frame</div>
+            <div class="group">
+              <div class="row">
+                <span class="row-label">Aspect</span>
+                <div class="segment-control"><button id="landscape" type="button" class="active" aria-pressed="true" disabled>16:9 <small>Landscape</small></button><button id="portrait" type="button" aria-pressed="false" disabled>9:16 <small>Portrait</small></button></div>
+              </div>
+              <button id="remote-turned" type="button" class="row switch-row" aria-pressed="false" disabled><span>OFF</span><b class="row-label">Rotate 180°</b></button>
+              <button id="open-settings" class="row stream-summary" type="button" aria-haspopup="dialog">
+                <span class="row-label"><strong id="stream-summary">1080p60 · H.264 · 60 Mbps</strong><small id="stream-summary-detail">VBR · quality mode</small></span>
+                <b class="chevron">Settings →</b>
+              </button>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <div class="section-title">Optics</div>
+            <div class="group">
+              <div class="row slider-row">
+                <label class="row-label" for="remote-zoom">Zoom</label>
+                <strong id="zoom-value">1.0×</strong>
+                <input id="remote-zoom" type="range" min="1" max="3" step="0.1" value="1" disabled />
+              </div>
+              <div class="row slider-row">
+                <label class="row-label" for="remote-ev">Exposure</label>
+                <strong id="ev-value">0.0 EV</strong>
+                <input id="remote-ev" type="range" min="-2" max="2" step="0.1" value="0" disabled />
+              </div>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <div class="section-title">Audio</div>
+            <div class="group">
+              <div class="row remote-audio-meter">
+                <span class="row-label">Mic level</span>
+                <div class="meter"><i id="remote-audio-level"></i></div>
+                <b id="remote-audio-db">−∞ dB</b>
+              </div>
+              <button id="remote-mute" type="button" class="row switch-row wide-toggle" aria-pressed="false" disabled><span>OFF</span><b class="row-label">Mute iPhone mic</b></button>
+            </div>
+          </section>
+
+          <footer class="panel-footer kicker">WebCodecs · binary WebSocket · hardware decode<span id="encoder-mode">Encoder idle</span><span class="signature">by <b>[AMS]</b> AMSTech</span></footer>
+        </aside>
+      </main>
+    </div>
+
+    <dialog id="settings-modal" aria-labelledby="settings-title">
+      <form method="dialog" class="modal-card settings-card">
+        <header>
+          <div><span class="eyebrow">Applied on the iPhone</span><h2 id="settings-title">Stream settings</h2><p>Changes apply immediately and are remembered by the iPhone.</p></div>
+          <button class="close-modal" value="close" aria-label="Close">×</button>
+        </header>
+
+        <section class="settings-block">
+          <div class="section-title">Quick profiles</div>
+          <div class="profile-grid">
+            <button type="button" class="profile-button" data-profile="max-quality" disabled><strong>Max quality</strong><small>4K30 · HEVC · 80 Mbps · VBR · quality</small><em>Best over USB</em></button>
+            <button type="button" class="profile-button" data-profile="low-latency" disabled><strong>Low latency</strong><small>1080p60 · H.264 · 40 Mbps · CBR · realtime</small><em>Best over Wi-Fi</em></button>
+          </div>
+        </section>
+
+        <div class="settings-columns">
+          <section class="settings-block control-section">
+            <div class="section-title">Video</div>
+            <div class="group">
+              <label class="row" for="remote-preset"><span class="row-label">Format</span><select id="remote-preset" disabled><optgroup label="16:9 · video modes"><option value="4k30" selected>4K · 30 fps</option><option value="4k60">4K · 60 fps</option><option value="1080p60">1080p · 60 fps</option><option value="1080p30">1080p · 30 fps</option></optgroup><optgroup label="4:3 · photo modes (no iPhone video processing)"><option value="4x3-12mp30">12 MP · 30 fps</option><option value="4x3-1440p30">1440p · 30 fps</option><option value="4x3-1080p60">1080p · 60 fps</option></optgroup></select></label>
+              <label class="row" for="remote-codec"><span class="row-label">Codec</span><select id="remote-codec" disabled><option value="avc1.640032">H.264 High</option><option value="hvc1.1.6.L153.B0">HEVC Main</option></select></label>
+              <div class="row slider-row">
+                <label class="row-label" for="remote-bitrate">Bitrate</label>
+                <strong id="bitrate-value">60 Mbps</strong>
+                <input id="remote-bitrate" type="range" min="20" max="200" step="10" value="60" disabled />
+              </div>
+            </div>
+            <div class="range-labels"><span>20 · Wi-Fi</span><span>200 Mbps · USB</span></div>
+          </section>
+
+          <section class="settings-block control-section">
+            <div class="section-title">Encoder</div>
+            <div class="group">
+              <label class="row" for="remote-rate-control"><span class="row-label">Rate control</span><select id="remote-rate-control" disabled><option value="variable">VBR · best quality</option><option value="constant">CBR · steady load</option></select></label>
+              <label class="row" for="remote-latency"><span class="row-label">Mode</span><select id="remote-latency" disabled><option value="quality">Quality · lookahead</option><option value="realtime">Realtime · lowest delay</option></select></label>
+            </div>
+            <p id="remote-photo-mode-note" class="settings-note photo-mode-note" hidden></p>
+            <p id="settings-encoder-status" class="settings-note">Connect an iPhone to apply settings.</p>
+          </section>
+
+          <section class="settings-block control-section">
+            <div class="section-title">Image</div>
+            <div class="group">
+              <label class="row" for="remote-focus"><span class="row-label">Focus</span><select id="remote-focus" disabled><option value="continuous">Continuous</option><option value="manual">Locked</option></select></label>
+              <label class="row" for="remote-exposure"><span class="row-label">Exposure</span><select id="remote-exposure" disabled><option value="continuous">Continuous</option><option value="manual">Locked</option></select></label>
+            </div>
+          </section>
+
+          <section class="settings-block control-section">
+            <div class="section-title">Audio</div>
+            <div class="group">
+              <label class="row" for="remote-mic-device"><span class="row-label">Microphone</span><select id="remote-mic-device" disabled><option value="">Default microphone</option></select></label>
+            </div>
+          </section>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="connection-modal">
+      <form method="dialog" class="modal-card">
+        <header>
+          <div><span class="eyebrow">Direct local connection</span><h2>Connect your iPhone</h2><p>Scan a code with the iOS Camera app, then accept the local certificate.</p></div>
+          <button class="close-modal" value="close" aria-label="Close">×</button>
+        </header>
+        <div class="connection-grid">
+          <section class="endpoint-card usb-card"><div class="endpoint-heading"><span class="recommended">Priority</span><h3>USB cable</h3><p>Connect iPhone by USB and enable Personal Hotspot on the iPhone.</p></div><div id="usb-endpoints" class="endpoint-list"></div></section>
+          <section class="endpoint-card"><div class="endpoint-heading"><span>Alternative</span><h3>Wi-Fi LAN</h3><p>Connect your iPhone and PC to the same router or local network.</p></div><div id="wifi-endpoints" class="endpoint-list"></div></section>
+        </div>
+        <footer><span>Endpoints refresh automatically every 3 seconds.</span><a href="/sender" target="_blank" rel="noopener noreferrer">Open sender on this device ↗</a></footer>
+      </form>
+    </dialog>
+    <div id="studio-toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/control/main.ts"></script>
+  </body>
+</html>
