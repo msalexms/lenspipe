@@ -161,6 +161,7 @@ class CameraSender {
   /** What the user asked for; survives camera reopens (lens/preset changes) and is re-applied after them. */
   private torchWanted = false;
   private sizeMismatchFrames = 0;
+  private pendingResizeVerify = false;
   private turned = false;
   /** The buffer rectangle sent for the current frame when the encoder limit crops it (null = whole frame). */
   private frameCrop: CropRect | null = null;
@@ -454,6 +455,12 @@ class CameraSender {
     return { width: preset.width, height: preset.height, frameRate: preset.frameRate };
   }
 
+  private matchesDesiredSize(width?: number, height?: number): boolean {
+    const desired = this.desiredDimensions();
+    return (width === desired.width && height === desired.height)
+      || (width === desired.height && height === desired.width);
+  }
+
   /**
    * Warns, here and in the studio, when the phone is held so that the picture comes out on its side (held
    * across the chosen aspect) or upside down. Only iOS reports how the phone is held. The state must stay
@@ -523,6 +530,8 @@ class CameraSender {
   private async openCamera(deviceId = this.selectedLens): Promise<void> {
     const generation = ++this.captureGeneration;
     this.stopVideoExtraction();
+    this.pendingResizeVerify = false;
+    this.sizeMismatchFrames = 0;
     this.videoStream?.getTracks().forEach((track) => track.stop());
     this.track = undefined;
     // The LED goes off with the old capture session; `torchWanted` is re-applied once the new track is live.
@@ -734,6 +743,36 @@ class CameraSender {
     }
   }
 
+  private stopWorkerCapture(): Promise<void> {
+    window.clearTimeout(this.captureWatchdog);
+    const worker = this.captureWorker;
+    this.captureWorker = undefined;
+    if (!worker) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        worker.onmessage = null;
+        worker.onerror = null;
+        worker.terminate();
+        resolve();
+      };
+      const timer = window.setTimeout(finish, 250);
+      worker.onmessage = (event: MessageEvent<{ type: string; frame?: VideoFrame }>) => {
+        if (event.data?.frame) event.data.frame.close();
+        if (event.data?.type === 'stopped' || event.data?.type === 'ended' || event.data?.type === 'error') finish();
+      };
+      worker.onerror = () => finish();
+      try {
+        worker.postMessage({ type: 'stop' });
+      } catch {
+        finish();
+      }
+    });
+  }
+
   /**
    * Frame source preference: MediaStreamTrackProcessor on the main thread (Chromium), then inside a
    * Worker (iOS Safari only exposes it there), then copying from the <video> element as a last resort.
@@ -752,9 +791,9 @@ class CameraSender {
     }
   }
 
-  private startWorkerCapture(track: MediaStreamTrack, generation: number): void {
+  private startWorkerCapture(track: MediaStreamTrack, generation: number, existingClone?: MediaStreamTrack): void {
     let worker: Worker | undefined;
-    let clone: MediaStreamTrack | undefined;
+    let clone: MediaStreamTrack | undefined = existingClone;
     const fallback = (reason: unknown, permanent: boolean) => {
       if (!worker || this.captureWorker !== worker) return;
       console.info('Worker frame capture unavailable; using <video> frames', reason);
@@ -765,7 +804,7 @@ class CameraSender {
     try {
       worker = new Worker(new URL('./capture-worker.ts', import.meta.url), { type: 'module' });
       // Transfer a clone so the original keeps feeding the on-screen preview.
-      clone = track.clone();
+      clone ??= track.clone();
       this.captureWorker = worker;
       this.captureSource = 'worker';
       worker.postMessage({ type: 'start', track: clone }, [clone as unknown as Transferable]);
@@ -858,15 +897,31 @@ class CameraSender {
       }
       if (frameWidth && frameHeight && (frameWidth !== this.encoderWidth || frameHeight !== this.encoderHeight)) {
         // Frames already in flight at the old size arrive right after an in-place resize: skip a couple
-        // before concluding the camera really changed size and rebuilding the encoder.
-        if (++this.sizeMismatchFrames < 3) return;
+        // before concluding the camera really changed size and rebuilding the encoder (or reopening).
+        const threshold = this.pendingResizeVerify ? 5 : 3;
+        if (++this.sizeMismatchFrames < threshold) return;
         this.sizeMismatchFrames = 0;
+        if (this.pendingResizeVerify) {
+          this.pendingResizeVerify = false;
+          if (!this.matchesDesiredSize(frameWidth, frameHeight)) {
+            this.reconfigurePending = true;
+            this.enqueue(async () => {
+              try {
+                await this.restartCamera();
+              } finally {
+                this.reconfigurePending = false;
+              }
+            });
+            return;
+          }
+        }
         this.encoderWidth = frameWidth;
         this.encoderHeight = frameHeight;
         this.rebuildEncoder(frameWidth, frameHeight);
         return;
       }
       this.sizeMismatchFrames = 0;
+      this.pendingResizeVerify = false;
       // Backlog = data the server hasn't confirmed yet (end-to-end), not just Safari's local buffer.
       // Keeping it to ~250 ms of video bounds the latency: if the link is slower than the bitrate,
       // frames are skipped (lower fps) instead of piling up as ever-growing lag.
@@ -1133,6 +1188,7 @@ class CameraSender {
     if (!this.track || !this.started) return;
     const generation = ++this.encoderGeneration;
     this.encoderFallbackTried = false;
+    this.sizeMismatchFrames = 0;
     const preset = this.desiredDimensions();
     const settings = this.track.getSettings();
     // Encode the size that will actually be sent, in sensor orientation (iOS reports the capture size the way
@@ -1697,6 +1753,13 @@ class CameraSender {
   private async resizeInPlace(): Promise<boolean> {
     const track = this.track;
     if (!track || track.readyState !== 'live') return false;
+    const wasWorker = this.captureSource === 'worker' && Boolean(this.captureWorker);
+    if (wasWorker) {
+      // Stop the worker and its cloned track first: clones hold independent constraints in WebKit and
+      // keep the capture session delivering the old resolution even after this.track is resized.
+      await this.stopWorkerCapture();
+      if (track !== this.track || track.readyState !== 'live' || !this.started) return false;
+    }
     const desired = this.desiredDimensions();
     const capabilities = track.getCapabilities?.() || {};
     const maxFps = capabilities.frameRate?.max || desired.frameRate;
@@ -1718,12 +1781,46 @@ class CameraSender {
     }
     const settings = track.getSettings();
     // iOS reports the size rotated when the phone is upright (1080×1920 for a 1920×1080 capture): accept both.
-    const sameSize = (settings.width === desired.width && settings.height === desired.height)
-      || (settings.width === desired.height && settings.height === desired.width);
-    if (track !== this.track || !sameSize) return false;
-    await this.restoreTorch();
-    this.configureTrackUi();
-    await this.configureEncoder();
+    if (track !== this.track || !this.matchesDesiredSize(settings.width, settings.height)) return false;
+
+    let workerClone: MediaStreamTrack | undefined;
+    if (wasWorker) {
+      workerClone = track.clone();
+      const cloneSettings = workerClone.getSettings();
+      const cloneLowFps = desired.frameRate >= 60 && (cloneSettings.frameRate || 0) < minFps;
+      if (!this.matchesDesiredSize(cloneSettings.width, cloneSettings.height) || cloneLowFps) {
+        try {
+          await workerClone.applyConstraints({
+            width: { exact: desired.width },
+            height: { exact: desired.height },
+            frameRate: { min: minFps, ideal: desired.frameRate },
+          });
+        } catch {
+          workerClone.stop();
+          return false;
+        }
+        if (!this.matchesDesiredSize(workerClone.getSettings().width, workerClone.getSettings().height)) {
+          workerClone.stop();
+          return false;
+        }
+      }
+    }
+
+    try {
+      await this.restoreTorch();
+      this.configureTrackUi();
+      this.layoutPreview();
+      await this.configureEncoder();
+    } catch {
+      workerClone?.stop();
+      return false;
+    }
+    if (track !== this.track || !this.started) {
+      workerClone?.stop();
+      return false;
+    }
+    if (wasWorker) this.startWorkerCapture(track, this.captureGeneration, workerClone);
+    this.pendingResizeVerify = true;
     this.forceNextKeyframe = true;
     return true;
   }
