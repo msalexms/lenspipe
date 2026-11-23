@@ -14,7 +14,7 @@ export interface NetworkEndpoint {
   networkCategory?: string;
   /**
    * Set when Windows Firewall will most likely block the phone: the interface is on the Public profile
-   * and no "Camera Link" allow rule exists. Holds the PowerShell (admin) command that fixes it.
+   * and no "LensPipe" allow rule exists. Holds the PowerShell (admin) command that fixes it.
    */
   firewallFix?: string;
   /**
@@ -35,7 +35,7 @@ const USB_DESC_PATTERN = /apple mobile device|iphone|ipad|remote ndis|rndis|andr
 const WIFI_NAME_PATTERN = /wi-?fi|wlan|wireless|airport/i;
 const HOTSPOT_IP_PATTERN = /^172\.20\.1[01]\./;
 const PRIVATE_PATTERNS = [/^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./];
-export const FIREWALL_RULE_NAME = 'Camera Link (local sender)';
+export const FIREWALL_RULE_NAME = 'LensPipe (local sender)';
 const PROFILE_RECHECK_MS = 15_000;
 const LINK_DOWN_RECHECK_MS = 5_000;
 /** Reads network profiles, adapter descriptions, whether our firewall rule exists, and whether each iOS USB gateway answers ARP. */
@@ -44,7 +44,7 @@ function profileQuery(gateways: string[]): string {
   return [
     '$p = @(Get-NetConnectionProfile | ForEach-Object { @{ alias = $_.InterfaceAlias; category = [string]$_.NetworkCategory } });',
     '$a = @(Get-NetAdapter | ForEach-Object { @{ alias = $_.Name; desc = [string]$_.InterfaceDescription } });',
-    `$r = @(Get-NetFirewallRule -DisplayName '${FIREWALL_RULE_NAME}' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count -gt 0;`,
+    `$r = @(Get-NetFirewallRule -DisplayName @('${FIREWALL_RULE_NAME}', 'Camera Link (local sender)') -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count -gt 0;`,
     // A ping forces an ARP resolution; the neighbor state then tells whether the iPhone is really there.
     `$n = @(foreach ($ip in @(${list})) { ping -n 1 -w 800 $ip | Out-Null; @{ ip = $ip; state = [string](Get-NetNeighbor -IPAddress $ip -ErrorAction SilentlyContinue | Select-Object -First 1).State } });`,
     '@{ profiles = $p; adapters = $a; rule = $r; neighbors = $n } | ConvertTo-Json -Compress -Depth 3',

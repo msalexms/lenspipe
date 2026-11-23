@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/brand/banner.svg" alt="Camera Link — An AMSTech project. Turn your iPhone or Android into a low-latency PC and OBS studio camera over USB or Wi-Fi." width="920">
+  <img src="docs/brand/banner.svg" alt="LensPipe — An AMSTech project. Turn your iPhone or Android into a low-latency PC and OBS studio camera over USB or Wi-Fi." width="920">
 </p>
 
 <p align="center">
@@ -53,7 +53,7 @@ Use your phone (**iPhone or Android**) as a low-latency studio camera on your PC
 | **Wi-Fi / LAN** | PC and phone on the same LAN with AP/client isolation disabled |
 
 > [!NOTE]
-> Built and tested thoroughly on iPhone (Safari) and verified on Android (Samsung Galaxy A57, Chrome). On Android, secondary lens controls, HEVC support, and max hardware encoding bitrate vary by device and browser; Camera Link automatically steps down codec profile, bitrate, or size when a hardware encoder refuses a setting.
+> Built and tested thoroughly on iPhone (Safari) and verified on Android (Samsung Galaxy A57, Chrome). On Android, secondary lens controls, HEVC support, and max hardware encoding bitrate vary by device and browser; LensPipe automatically steps down codec profile, bitrate, or size when a hardware encoder refuses a setting.
 
 ---
 
@@ -94,13 +94,13 @@ Click **Connect phone** in the top bar. USB connections appear under **Priority*
 ### USB cable (recommended)
 
 - **iPhone:** plug in the USB cable, tap **Trust** if prompted, and open **Settings → Personal Hotspot → Allow Others to Join** (keep that screen open briefly until the interface appears; cellular service is not required for local USB streaming, and Personal Hotspot must stay enabled while streaming).
-- **Android:** plug in the USB cable and turn on **USB tethering** in Android Settings (typically **Connections → Mobile Hotspot and Tethering**). On Windows, Camera Link detects RNDIS and USB-NCM tethering adapters alongside Apple USB interfaces.
+- **Android:** plug in the USB cable and turn on **USB tethering** in Android Settings (typically **Connections → Mobile Hotspot and Tethering**). On Windows, LensPipe detects RNDIS and USB-NCM tethering adapters alongside Apple USB interfaces.
 - Scan the **USB cable** QR code with your phone camera, or copy the sender URL including `#k=…` (on iPhone Personal Hotspot, typically `https://172.20.10.x:8443/sender#k=…`).
 
 > [!WARNING]
 > **If the USB page never loads on Windows:** Windows often assigns new USB tethering adapters (*Apple Mobile Device Ethernet* or Android RNDIS) to the **Public** network profile, whereas the initial Node.js firewall prompt usually grants **Private** access only. The server detects this automatically and shows the exact one-line fix in **Connect phone** and the terminal:
 > ```powershell
-> New-NetFirewallRule -DisplayName 'Camera Link (local sender)' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8443 -RemoteAddress 172.20.10.0/28 -Profile Public
+> New-NetFirewallRule -DisplayName 'LensPipe (local sender)' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8443 -RemoteAddress 172.20.10.0/28 -Profile Public
 > ```
 > Alternatively, change that USB adapter's **Network profile type** to **Private** in **Settings → Network & internet → Ethernet**.
 
@@ -268,14 +268,14 @@ Pull requests and issues are welcome. Before opening a PR, run `npm run typechec
 
 ## Design
 
-Camera Link follows the **AMSTech brand manual v1.5 («stickers only»)** implemented via the offline-bundled package in [`src/amstech-ui/`](src/amstech-ui/README.md) (so every asset stays `'self'`-hosted under strict CSP):
+LensPipe follows the **AMSTech brand manual v1.5 («stickers only»)** implemented via the offline-bundled package in [`src/amstech-ui/`](src/amstech-ui/README.md) (so every asset stays `'self'`-hosted under strict CSP):
 
 | Element | Specification |
 | --- | --- |
 | **Palette (always light)** | Cream paper `#FFF6E9`, white cards `#FFFFFF`, ink `#1E1B2E`, `2.5 px` ink borders, `6 px` corners, hard ink shadows |
-| **Accents** | Cobalt `#2B36D9` (one primary CTA per view), yellow `#FFE27A` (selection, highlight & warning), sky blue `#7CC4FF` (camera sticker) |
+| **Accents** | Cobalt `#2B36D9` (one primary CTA per view), yellow `#FFE27A` (selection, highlight & warning), sky blue `#7CC4FF` (camera body) |
 | **Typography** | **Bricolage Grotesque** (display & headings), **Figtree** (UI copy), **DM Mono** (figures & URLs) — bundled under SIL OFL |
-| **Stickers & logo** | Cobalt **Thor** terminal head logo (`>_` + `| amstech`), camera die-cut sticker, and USB chapter-bar ears (boxes remain ear-free) |
+| **Stickers & logo** | Cobalt **Thor** terminal head logo (`>_` + `\| amstech`), custom **Thor cámara** die-cut sticker, and USB chapter-bar ears (boxes remain ear-free) |
 
 ---
 

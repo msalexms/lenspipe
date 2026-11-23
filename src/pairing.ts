@@ -3,7 +3,8 @@
  * fragment (`#k=…`), which never reaches the server or the Referer; it is kept per device so reloading
  * the bare URL keeps working, and removed from the address bar.
  */
-const STORAGE_KEY = 'camera-link.pairing-token';
+const STORAGE_KEY = 'lenspipe.pairing-token';
+const LEGACY_STORAGE_KEY = 'camera-link.pairing-token';
 let cached: string | null | undefined;
 
 export function pairingToken(): string | null {
@@ -15,7 +16,16 @@ export function pairingToken(): string | null {
     cached = fromUrl;
     return cached;
   }
-  try { cached = localStorage.getItem(STORAGE_KEY); } catch { cached = null; }
+  try {
+    cached = localStorage.getItem(STORAGE_KEY);
+    if (!cached) {
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        cached = legacy;
+        try { localStorage.setItem(STORAGE_KEY, legacy); } catch { /* ignore */ }
+      }
+    }
+  } catch { cached = null; }
   return cached;
 }
 

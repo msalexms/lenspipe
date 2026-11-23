@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Camera Link · Sender</title>
+    <title>LensPipe · Sender</title>
     <link rel="stylesheet" href="/src/sender.css" />
   </head>
   <body>
     <main class="sender-shell">
       <header class="sender-header">
-        <div class="brand logo" translate="no"><svg class="thor" width="26" height="26" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>camera link<span class="live-dot dot" aria-hidden="true"></span></div>
+        <div class="brand logo" translate="no"><svg class="thor" width="26" height="26" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>lenspipe<span class="live-dot dot" aria-hidden="true"></span></div>
         <div class="telemetry-pill">
           <strong id="transport">—</strong><span id="bitrate-live">0 Mbps</span><span id="resolution-live">—</span><span id="fps-live">0 FPS</span><span id="queue-live">Q0</span>
         </div>
@@ -90,9 +90,9 @@
       </dialog>
 
       <section id="start-screen" class="start-screen">
-        <svg class="sticker start-sticker" width="92" height="92" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
+        <svg class="sticker start-sticker" width="98" height="92" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
         <div class="start-card">
-          <span class="logo" translate="no"><svg class="thor" width="28" height="28" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>camera link</span>
+          <span class="logo" translate="no"><svg class="thor" width="28" height="28" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>lenspipe</span>
           <h1>Your phone, your studio camera.</h1>
           <p>Enable camera access, then keep this tab open. Works on iPhone and Android — for USB, connect the cable and enable Personal Hotspot or USB tethering.</p>
           <button id="start" class="primary-button">Start camera</button>

@@ -58,10 +58,15 @@ h1, h2, h3 { text-wrap: balance; }
 .thor .cabeza { fill: var(--ams-thor); stroke: var(--borde); stroke-width: 2.6; stroke-linejoin: round; }
 .thor .prompt { fill: none; stroke: #fff; stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; }
 .sticker { display: block; flex: none; overflow: visible; filter: drop-shadow(3px 3px 0 var(--borde)); }
-.sticker .fondo { fill: #fff; stroke: #fff; stroke-width: 12; stroke-linejoin: round; }
-.sticker .cuerpo { fill: var(--camara); stroke: var(--borde); stroke-width: 3.5; stroke-linejoin: round; }
-.sticker .lente { fill: #fff; stroke: var(--borde); stroke-width: 3.5; }
+.sticker .fondo { fill: #fff; stroke: #fff; stroke-width: 11; stroke-linejoin: round; }
+.sticker .thor-cam { fill: var(--ams-thor); stroke: var(--borde); stroke-width: 3.2; stroke-linejoin: round; }
+.sticker .ojos, .sticker .brillo { fill: #fff; }
+.sticker .cuerpo { fill: var(--camara); stroke: var(--borde); stroke-width: 3.2; stroke-linejoin: round; }
+.sticker .franja { fill: var(--amarillo); stroke: var(--borde); stroke-width: 2.2; }
+.sticker .tally { fill: var(--ams-senal); stroke: var(--borde); stroke-width: 2.2; }
+.sticker .lente { fill: #fff; stroke: var(--borde); stroke-width: 3.2; }
 .sticker .pupila { fill: var(--borde); }
+.sticker .patas { fill: var(--ams-thor); stroke: var(--borde); stroke-width: 2.8; }
 /* project line: "An AMSTech project" plus what is shared */
 .signature { color: var(--gris); font-size: .78rem; font-weight: 600; letter-spacing: 0; text-transform: none; white-space: nowrap; }
 .signature b { color: var(--tinta); font-weight: 800; }
