@@ -168,11 +168,11 @@ Upgrading from an older certificate without name constraints regenerates `certs/
 ## OBS Studio
 
 1. Add **Sources → Browser**.
-2. Click **OBS source** in `/control` to copy the exact authenticated URL (including `#k=…`), for example:
+2. Click **OBS source** in `/control` to open the built-in OBS setup guide and copy the exact authenticated URL (including `#k=…`), for example:
    ```text
    https://192.168.1.20:8443/obs
    ```
-   *(Shift-click **OBS source** to preview `/obs` in a browser tab.)*
+   *(Shift-click **OBS source** to open `/obs` directly in a browser tab.)*
 3. Set OBS Browser width and height to match your scene canvas (e.g. `1920 × 1080`), and optionally enable **Refresh browser when scene becomes active**.
 4. Enable **Control audio via OBS** if you want the phone mic routed to OBS's audio mixer (click the view once if OBS suspends Web Audio).
 

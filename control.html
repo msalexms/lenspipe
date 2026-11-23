@@ -18,7 +18,7 @@
           <span id="connection-status" class="status-chip pill" role="status"><i aria-hidden="true"></i><span>Waiting for phone…</span></span>
           <button id="show-connection" type="button" class="secondary-button with-icon ico-plug">Connect phone</button>
           <button id="header-settings" type="button" class="secondary-button with-icon ico-sliders" aria-haspopup="dialog">Settings</button>
-          <button id="open-obs" type="button" class="secondary-button yellow-button with-icon ico-obs">OBS source</button>
+          <button id="open-obs" type="button" class="secondary-button yellow-button with-icon ico-obs" aria-haspopup="dialog">OBS source</button>
           <button id="header-about" type="button" class="secondary-button icon-button with-icon ico-info" aria-haspopup="dialog" aria-label="About LensPipe" title="About"></button>
         </div>
       </header>
@@ -255,6 +255,48 @@
           <div><dt>Privacy</dt><dd>Local network only</dd></div>
         </dl>
         <footer><span>Shortcut: <kbd>K</kbd> forces a keyframe · Click preview to focus</span><span>© AMSTech</span></footer>
+      </form>
+    </dialog>
+
+    <dialog id="obs-modal" class="obs-dialog" aria-labelledby="obs-title">
+      <form method="dialog" class="modal-card">
+        <header>
+          <svg class="sticker" width="52" height="48" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
+          <div><span class="eyebrow">OBS Studio</span><h2 id="obs-title">Add LensPipe to OBS</h2><p>Borderless Browser Source with automatic aspect-ratio framing and phone audio.</p></div>
+          <button class="close-modal with-icon ico-x" value="close" aria-label="Close"></button>
+        </header>
+        <section class="obs-url-card">
+          <div class="obs-url-head">
+            <span class="section-title">Browser Source URL</span>
+            <span class="pill"><span class="dot ok" aria-hidden="true"></span><span>Borderless · Auto-reconnect</span></span>
+          </div>
+          <div class="obs-url-row">
+            <code id="obs-url" class="obs-url"></code>
+            <button id="obs-copy-url" type="button" class="primary-button with-icon ico-copy">Copy OBS URL</button>
+            <button id="obs-open-preview" type="button" class="secondary-button">Preview ↗</button>
+          </div>
+          <small id="obs-url-hint"></small>
+        </section>
+        <div class="obs-grid">
+          <section class="obs-steps-card">
+            <span class="section-title">Step by step</span>
+            <h3>Configure in OBS Studio</h3>
+            <ol class="obs-steps">
+              <li><strong>Add Browser Source:</strong> In OBS, open <strong>Sources → + → Browser</strong> and name it <em>LensPipe</em>.</li>
+              <li><strong>Paste URL &amp; canvas size:</strong> Paste the URL above and set <strong>Width × Height</strong> to <strong id="obs-size-hint">3840 × 2160</strong> (or your OBS canvas, e.g. <span class="mono">1920 × 1080</span>). Leave Custom CSS empty.</li>
+              <li><strong>Phone audio (optional):</strong> Check <strong>Control audio via OBS</strong> for a dedicated mixer fader, then turn on <strong>Phone mic</strong> in LensPipe.</li>
+              <li><strong>Scene switching &amp; live control:</strong> Optionally enable <strong>Refresh browser when scene becomes active</strong>. Lens, zoom, aspect, and EV changes apply live.</li>
+            </ol>
+          </section>
+          <aside class="firewall-warning obs-trust-card">
+            <strong>⚠ Blank or black source in OBS?</strong>
+            <p>OBS uses its own Chromium trust store and may block the local self-signed HTTPS certificate. Trust <span class="mono">certs/local-cert.pem</span> once in Windows PowerShell, then restart OBS:</p>
+            <code id="obs-cert-cmd">Import-Certificate -FilePath .\certs\local-cert.pem -CertStoreLocation Cert:\CurrentUser\Root</code>
+            <button id="obs-copy-cert" type="button" class="copy-button secondary-button small-button with-icon ico-copy">Copy command</button>
+            <small>Only trust a certificate generated on your own PC. On macOS, trust <span class="mono">certs/local-cert.pem</span> in Keychain Access.</small>
+          </aside>
+        </div>
+        <footer><span>Tip: Shift-click “OBS source” in the top bar to open /obs directly.</span><a href="/obs" target="_blank" rel="noopener noreferrer">Open /obs in new tab ↗</a></footer>
       </form>
     </dialog>
     <div id="studio-toast" role="status" aria-live="polite"></div>
