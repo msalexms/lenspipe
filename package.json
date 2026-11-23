@@ -1,11 +1,13 @@
 {
   "name": "iphone-camera-link",
   "version": "1.0.0",
-  "description": "Use an iPhone as a low-latency studio camera on your PC and in OBS, over USB or Wi-Fi. Local only: WebCodecs + WebSockets, no app, no cloud.",
+  "description": "Use your phone (iPhone or Android) as a low-latency studio camera on your PC and in OBS, over USB or Wi-Fi. Local only: WebCodecs + WebSockets, no app, no cloud.",
   "license": "MIT",
   "author": "AMSTech",
   "keywords": [
     "iphone",
+    "android",
+    "phone",
     "webcam",
     "obs",
     "webcodecs",

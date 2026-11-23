@@ -88,7 +88,7 @@ try {
   await evaluate(`(() => {
     const b = document.getElementById('health-banner'); b.hidden = false;
     document.getElementById('health-title').textContent = "⚠ Wi-Fi can't keep up with 120 Mbps";
-    document.getElementById('health-detail').textContent = 'RTT 420 ms · 850 ms queued on the iPhone · 6 frames/s skipped. A USB cable carries far more.';
+    document.getElementById('health-detail').textContent = 'RTT 420 ms · 850 ms queued on the phone · 6 frames/s skipped. A USB cable carries far more.';
     document.getElementById('health-action').textContent = 'Lower to 50 Mbps';
   })()`);
   await pause(100);
@@ -141,7 +141,7 @@ try {
   await evaluate(`(() => {
     const b = document.getElementById('health-banner'); b.hidden = false;
     document.getElementById('health-title').textContent = "⚠ Wi-Fi can't keep up with 120 Mbps";
-    document.getElementById('health-detail').textContent = 'RTT 420 ms · 850 ms queued on the iPhone · 6 frames/s skipped. A USB cable carries far more.';
+    document.getElementById('health-detail').textContent = 'RTT 420 ms · 850 ms queued on the phone · 6 frames/s skipped. A USB cable carries far more.';
     document.getElementById('health-action').textContent = 'Lower to 50 Mbps';
   })()`);
   await screenshot('sender-controls-mobile');

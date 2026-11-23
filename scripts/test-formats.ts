@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, PRESETS, h264Codec, hevcCodecs, limitCrop, sanitizeSettings } from '../src/stream-settings';
+import { DEFAULT_SETTINGS, MIN_BITRATE, PRESETS, h264Codec, h264Codecs, hevcCodecs, limitCrop, sanitizeSettings } from '../src/stream-settings';
 
 // Defaults: the best picture with the least fuss, from an iOS video mode.
 assert.equal(DEFAULT_SETTINGS.preset, '4k30');
@@ -21,6 +21,10 @@ assert.equal(h264Codec(3840, 2160, 30, 60_000_000), 'avc1.640033', '4K30 is leve
 assert.equal(h264Codec(3840, 2160, 60, 60_000_000), 'avc1.640034', '4K60 is level 5.2');
 assert.deepEqual(hevcCodecs(3840, 2160, 80_000_000), ['hvc1.1.6.H153.B0', 'hvc1.1.6.L153.B0']);
 assert.deepEqual(hevcCodecs(1920, 1080, 30_000_000), ['hvc1.1.6.L153.B0']);
+assert.equal(MIN_BITRATE, 10_000_000);
+assert.equal(sanitizeSettings({ bitrate: 10_000_000 }).bitrate, 10_000_000);
+assert.deepEqual(h264Codecs(3840, 2160, 30, 60_000_000), ['avc1.640033', 'avc1.4D4033', 'avc1.42E033']);
+assert.deepEqual(h264Codecs(1920, 1080, 30, 10_000_000), ['avc1.640028', 'avc1.4D4028', 'avc1.42E028']);
 
 // Encoder limit safety net: a frame the encoder refuses is centre-cropped to the largest accepted size.
 const frame = { x: 0, y: 0, width: 3840, height: 2160 };

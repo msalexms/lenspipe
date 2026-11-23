@@ -73,7 +73,7 @@ const previousCounts = { networkDrops: 0, encoderDrops: 0, receiverDrops: 0, rel
 const health = new HealthMonitor();
 const healthBanner = new HealthBanner((changes) => {
   setEncoding(changes);
-  toast('Sent to the iPhone');
+  toast('Sent to the phone');
 });
 
 function delta(key: keyof typeof previousCounts, total: number): number {
@@ -96,7 +96,7 @@ function updateHealth(server: ControlMessage): void {
   const stalled = silenceMs > 2500;
   if (stalled && server.online) {
     $('metric-fps-value').textContent = '—';
-    $('metric-queue').textContent = `no iPhone data for ${(silenceMs / 1000).toFixed(1)} s`;
+    $('metric-queue').textContent = `no phone data for ${(silenceMs / 1000).toFixed(1)} s`;
   }
   healthBanner.show(health.update(online ? {
     settings: latestSettings!,
@@ -139,7 +139,7 @@ function setOnline(online: boolean): void {
   phoneOnline = online;
   $('waiting').classList.toggle('hidden', online);
   const statusChip = $('connection-status');
-  const statusText = online ? 'iPhone connected' : 'Waiting for iPhone…';
+  const statusText = online ? 'Phone connected' : 'Waiting for phone…';
   statusChip.classList.toggle('online', online);
   statusChip.title = statusText;
   const dot = document.createElement('i');
@@ -177,7 +177,7 @@ function setOnline(online: boolean): void {
     $('metric-rtt').textContent = '— ms';
     $('metric-queue').textContent = 'decoder queue 0';
     $('encoder-mode').textContent = 'Encoder idle';
-    $('settings-encoder-status').textContent = 'Connect an iPhone to apply settings.';
+    $('settings-encoder-status').textContent = 'Connect a phone to apply settings.';
     $<HTMLElement>('remote-audio-level').style.setProperty('--level', '0');
     $('remote-audio-db').textContent = '−∞ dB';
     renderAudioStatus();
@@ -262,8 +262,8 @@ receiver.addEventListener('sender-focus', (event) => {
   // Only explain results for clicks made here (the iPhone shows its own messages for its own taps).
   if (performance.now() - lastFocusAt > 3000) return;
   if (result === 'locked') toast('Focus is locked: set Focus to Continuous in Settings');
-  else if (result === 'unsupported') toast('Safari does not expose focus control on this iPhone');
-  else if (result === 'refocus') toast('Refocusing (Safari only allows a full-frame autofocus pass)');
+  else if (result === 'unsupported') toast('This browser does not expose focus control on this lens');
+  else if (result === 'refocus') toast('Refocusing (this browser only allows a full-frame autofocus pass)');
 });
 // Microphone problems reported by the iPhone (permission denied, needs a tap, busy) are shown here too,
 // otherwise turning the mic on from the studio would just silently stay off.
@@ -287,11 +287,11 @@ function renderAudioStatus(): void {
   let text: string;
   let level: 'idle' | 'ok' | 'warn';
   if (micProblem) {
-    [text, level] = [micProblem.startsWith('Tap') ? 'Tap the iPhone screen to start its mic' : 'iPhone mic blocked: see message on the iPhone', 'warn'];
+    [text, level] = [micProblem.startsWith('Tap') ? 'Tap the phone screen to start its mic' : 'Phone mic blocked: see message on the phone', 'warn'];
   } else if (!senderMicEnabled) {
-    [text, level] = ['iPhone mic off', 'idle'];
+    [text, level] = ['Phone mic off', 'idle'];
   } else if (senderMuted) {
-    [text, level] = ['iPhone mic muted', 'idle'];
+    [text, level] = ['Phone mic muted', 'idle'];
   } else if (!lastAudio || lastAudio.chunksPerSecond === 0) {
     [text, level] = ['Mic on, but no audio is arriving', 'warn'];
   } else if (audioEnabled && lastAudio.state === 'suspended') {
@@ -360,7 +360,7 @@ function applySenderState(message: ControlMessage): void {
   const photoMode = Boolean(PRESETS[settings.preset as keyof typeof PRESETS]?.photoMode);
   const photoNote = $('remote-photo-mode-note');
   photoNote.hidden = !photoMode;
-  photoNote.textContent = `${PHOTO_MODE_WARNING} 12 MP may be cropped to what the iPhone can encode, and needs a GPU that decodes level 6.0.`;
+  photoNote.textContent = `${PHOTO_MODE_WARNING} 12 MP may be cropped to what the phone can encode, and needs a GPU that decodes level 6.0.`;
   $('stream-summary-detail').classList.toggle('photo-mode-detail', photoMode);
   renderHoldBanner(phoneOnline ? settings.hold : 'ok', settings.orientation, Boolean(settings.turned), settings.preset);
   $<HTMLSelectElement>('remote-codec').value = settings.codec;
@@ -522,14 +522,14 @@ function renderHoldBanner(hold: SenderSettings['hold'], orientation: 'landscape'
   const landscape = orientation === 'landscape';
   if (hold === 'upside-down') {
     $('hold-banner-title').textContent = 'The picture is upside down';
-    $('hold-banner-detail').textContent = 'Turn the iPhone round, or rotate the picture.';
+    $('hold-banner-detail').textContent = 'Turn the phone round, or rotate the picture.';
     $('hold-banner-action').textContent = 'Rotate 180°';
     holdFix = { command: 'set-encoding', settings: { turned: !turned } };
   } else {
-    $('hold-banner-title').textContent = landscape ? 'Turn the iPhone sideways' : 'Turn the iPhone upright';
+    $('hold-banner-title').textContent = landscape ? 'Turn the phone sideways' : 'Turn the phone upright';
     const ratio = (PRESETS[preset as keyof typeof PRESETS] ?? PRESETS['4k30']).ratio;
     const [here, there] = landscape ? [ratio, ratio.split(':').reverse().join(':')] : [ratio.split(':').reverse().join(':'), ratio];
-    $('hold-banner-detail').textContent = `The stream is ${here} but the iPhone is ${landscape ? 'upright' : 'sideways'}, so the picture arrives on its side. If it is not, turn off Rotation Lock on the iPhone.`;
+    $('hold-banner-detail').textContent = `The stream is ${here} but the phone is ${landscape ? 'upright' : 'sideways'}, so the picture arrives on its side. If it is not, turn off Rotation Lock on the phone.`;
     $('hold-banner-action').textContent = `Use ${there}`;
     holdFix = { command: 'set-orientation', orientation: landscape ? 'portrait' : 'landscape' };
   }
@@ -581,7 +581,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-profile
     if (!profile) return;
     setEncoding(profile.settings);
     $<HTMLDialogElement>('settings-modal').close();
-    toast(`${profile.label} profile sent to the iPhone`);
+    toast(`${profile.label} profile sent to the phone`);
   });
 }
 function enableBackdropClose(dialog: HTMLDialogElement): void {
@@ -722,9 +722,9 @@ async function renderNetwork(network: NetworkSnapshot): Promise<void> {
   const usbFound = network.usb.length > 0;
   setStatePill('usb-state', usbFound, usbFound ? 'Detected' : 'Not detected');
   setStatePill('wifi-state', network.wifi.length > 0, network.wifi.length > 0 ? 'Ready' : 'No network');
-  $('usb-steps').innerHTML = stepsBar(['Cable', 'Hotspot', 'Scan', 'Trust'], usbFound ? 2 : 0);
+  $('usb-steps').innerHTML = stepsBar(['Cable', 'Tethering', 'Scan', 'Trust'], usbFound ? 2 : 0);
   await Promise.all([
-    renderEndpoints('usb-endpoints', network.usb, 'No Apple USB interface detected. Connect the cable and enable Personal Hotspot.', generation),
+    renderEndpoints('usb-endpoints', network.usb, 'No phone USB interface detected. Connect the cable and enable Personal Hotspot (iPhone) or USB tethering (Android).', generation),
     renderEndpoints('wifi-endpoints', network.wifi, 'No private LAN interface detected. Connect this PC to Wi-Fi or Ethernet.', generation),
   ]);
 }
@@ -781,13 +781,13 @@ function linkDownWarning(): HTMLElement {
   const box = document.createElement('div');
   box.className = 'firewall-warning';
   const title = document.createElement('strong');
-  title.textContent = '⚠ The iPhone is not answering over the cable';
+  title.textContent = '⚠ The phone is not answering over the cable';
   const text = document.createElement('p');
-  text.textContent = 'Windows shows the USB network as connected, but nothing comes back from the iPhone, so the page cannot load. On the iPhone:';
+  text.textContent = 'Windows shows the USB network as connected, but nothing comes back from the phone, so the page cannot load. On iPhone:';
   const steps = document.createElement('ol');
   for (const step of [
     'Settings → Personal Hotspot: turn “Allow Others to Join” off and on again, and keep that screen open.',
-    'Unplug and replug the cable; unlock the iPhone and tap “Trust” if asked.',
+    'Unplug and replug the cable; unlock the phone and tap “Trust” if asked.',
     'The status bar should show the hotspot indicator (link icon / green pill). This warning disappears within a few seconds.',
   ]) {
     const item = document.createElement('li');
@@ -798,14 +798,14 @@ function linkDownWarning(): HTMLElement {
   return box;
 }
 
-/** Windows puts new iPhone USB networks on the Public profile, where Node's firewall rule doesn't apply. */
+/** Windows puts new phone USB networks on the Public profile, where Node's firewall rule doesn't apply. */
 function firewallWarning(endpoint: NetworkEndpoint): HTMLElement {
   const box = document.createElement('div');
   box.className = 'firewall-warning';
   const title = document.createElement('strong');
-  title.textContent = `⚠ Windows Firewall will block the iPhone on “${endpoint.name}”`;
+  title.textContent = `⚠ Windows Firewall will block the phone on “${endpoint.name}”`;
   const text = document.createElement('p');
-  text.textContent = 'Windows classifies this network as Public, and Node.js is only allowed on Private networks, so the page never loads on the iPhone. '
+  text.textContent = 'Windows classifies this network as Public, and Node.js is only allowed on Private networks, so the page never loads on the phone. '
     + 'Run this once in PowerShell as administrator (it only opens this port to this USB subnet):';
   const command = document.createElement('code');
   command.textContent = endpoint.firewallFix || '';
