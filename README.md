@@ -176,11 +176,31 @@ Upgrading from an older certificate without name constraints regenerates `certs/
 3. Set OBS Browser width and height to match your scene canvas (e.g. `1920 × 1080`), and optionally enable **Refresh browser when scene becomes active**.
 4. Enable **Control audio via OBS** if you want the phone mic routed to OBS's audio mixer (click the view once if OBS suspends Web Audio).
 
-If OBS's embedded Chromium rejects the local self-signed HTTPS certificate, import `certs/local-cert.pem` into your **Current User → Trusted Root Certification Authorities** store and restart OBS:
+If OBS's embedded Chromium rejects the local self-signed HTTPS certificate, trust `certs/local-cert.pem` on the PC running OBS and restart OBS completely (**OBS source** in `/control` pre-fills the command with the exact full path):
 
-```powershell
-Import-Certificate -FilePath .\certs\local-cert.pem -CertStoreLocation Cert:\CurrentUser\Root
-```
+- **Windows (PowerShell):** run from the LensPipe folder (or use the full path to `certs/local-cert.pem`):
+  ```powershell
+  Import-Certificate -FilePath .\certs\local-cert.pem -CertStoreLocation Cert:\CurrentUser\Root
+  ```
+- **macOS (Terminal / Keychain Access):**
+  ```sh
+  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ./certs/local-cert.pem
+  ```
+  *(Or double-click `certs/local-cert.pem` in Finder → Keychain Access → Trust → **Always Trust**, then quit OBS with `Cmd + Q` and reopen.)*
+- **Linux (Chromium NSS for native OBS, or system CA for Flatpak OBS):**
+  1. Native builds use `~/.pki/nssdb` (`libnss3-tools` on Debian/Ubuntu, `nss-tools` on Fedora/Arch):
+     ```sh
+     mkdir -p ~/.pki/nssdb
+     certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "LensPipe" -i ./certs/local-cert.pem
+     ```
+     *(If `~/.pki/nssdb` is new and uninitialized, run `certutil -d sql:$HOME/.pki/nssdb -N --empty-password` first.)*
+  2. Flatpak OBS (`com.obsproject.Studio`) reads the host system CA trust store instead:
+     ```sh
+     # Debian / Ubuntu / Mint
+     sudo cp ./certs/local-cert.pem /usr/local/share/ca-certificates/lenspipe.crt && sudo update-ca-certificates
+     # Fedora / RHEL / Arch
+     sudo cp ./certs/local-cert.pem /etc/pki/ca-trust/source/anchors/lenspipe.crt && sudo update-ca-trust
+     ```
 
 > [!CAUTION]
 > Only import a certificate generated on your own PC, and never launch OBS with global `--ignore-certificate-errors` flags for normal use.

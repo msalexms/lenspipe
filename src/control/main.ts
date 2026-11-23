@@ -676,8 +676,61 @@ $('audio-monitor').addEventListener('click', () => {
   renderAudioStatus();
 });
 receiver.setAudioMuted(true);
+type ObsOs = 'win32' | 'darwin' | 'linux';
+function detectBrowserOs(): ObsOs {
+  const ua = navigator.userAgent;
+  if (/Mac/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua)) return 'darwin';
+  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return 'linux';
+  return 'win32';
+}
+let localCertPath = '';
+let serverPlatform = '';
+let obsOs: ObsOs = detectBrowserOs();
+let obsOsManual = false;
+
 function obsUrl(): string {
   return withPairingToken(`${location.origin}/obs`);
+}
+
+function psQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function obsCertPathFor(os: ObsOs): string {
+  if (localCertPath && os === serverPlatform) return localCertPath;
+  return os === 'win32' ? '.\\certs\\local-cert.pem' : './certs/local-cert.pem';
+}
+
+function renderObsCertGuide(): void {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-obs-os]')) {
+    const active = button.dataset.obsOs === obsOs;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  }
+  const path = obsCertPathFor(obsOs);
+  const usingAbsolute = Boolean(localCertPath && obsOs === serverPlatform);
+  const intro = $('obs-cert-intro');
+  const cmd = $('obs-cert-cmd');
+  const note = $('obs-cert-note');
+  if (obsOs === 'darwin') {
+    intro.textContent = 'Run once in Terminal (adds the local CA to the System Keychain), then fully quit (Cmd + Q) and reopen OBS:';
+    cmd.textContent = `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ${shQuote(path)}`;
+    note.textContent = 'GUI alternative: double-click local-cert.pem in Finder to open Keychain Access, set Trust → Always Trust, then restart OBS.';
+  } else if (obsOs === 'linux') {
+    intro.textContent = 'OBS Browser Source uses Chromium NSS. Install libnss3-tools (Debian/Ubuntu) or nss-tools (Fedora/Arch), run once, then restart OBS:';
+    cmd.textContent = `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "LensPipe" -i ${shQuote(path)}`;
+    note.textContent = 'If ~/.pki/nssdb doesn\'t exist yet, create it with: mkdir -p ~/.pki/nssdb && certutil -d sql:$HOME/.pki/nssdb -N --empty-password. For Flatpak OBS, add local-cert.pem to the system CA store (update-ca-certificates / update-ca-trust).';
+  } else {
+    intro.textContent = usingAbsolute
+      ? 'Run once in PowerShell (from any folder), confirm the Windows prompt, then restart OBS completely:'
+      : 'Run in PowerShell from the LensPipe folder, confirm the prompt, then restart OBS completely:';
+    cmd.textContent = `Import-Certificate -FilePath ${psQuote(path)} -CertStoreLocation Cert:\\CurrentUser\\Root`;
+    note.textContent = 'Installs into CurrentUser\\Root (no admin needed). Only trust a certificate generated on your own PC.';
+  }
 }
 
 function updateObsModal(): void {
@@ -695,6 +748,17 @@ function updateObsModal(): void {
   const activeOrientation = latestSettings?.orientation ?? DEFAULT_SETTINGS.orientation;
   const size = presetSize(activePreset, activeOrientation);
   $('obs-size-hint').textContent = `${size.width} × ${size.height}`;
+  renderObsCertGuide();
+}
+
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-obs-os]')) {
+  button.addEventListener('click', () => {
+    const os = button.dataset.obsOs;
+    if (os !== 'win32' && os !== 'darwin' && os !== 'linux') return;
+    obsOs = os;
+    obsOsManual = true;
+    renderObsCertGuide();
+  });
 }
 
 $('open-obs').addEventListener('click', (event) => {
@@ -734,9 +798,15 @@ async function refreshNetwork(): Promise<void> {
     const token = pairingToken();
     const response = await fetch('/api/network', { cache: 'no-store', headers: token ? { 'x-pairing-key': token } : {} });
     if (!response.ok) return;
-    const network = await response.json() as NetworkSnapshot & { pairingToken?: string };
+    const network = await response.json() as NetworkSnapshot & { pairingToken?: string; certPath?: string; platform?: string };
     if (network.pairingToken) rememberPairingToken(network.pairingToken);
+    if (network.certPath) localCertPath = network.certPath;
+    if (network.platform === 'win32' || network.platform === 'darwin' || network.platform === 'linux') {
+      serverPlatform = network.platform;
+      if (!obsOsManual) obsOs = network.platform;
+    }
     await renderNetwork(network);
+    if ($<HTMLDialogElement>('obs-modal').open) renderObsCertGuide();
   } catch {
     // The next poll retries; video/control traffic is unaffected.
   }

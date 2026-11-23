@@ -290,10 +290,15 @@
           </section>
           <aside class="firewall-warning obs-trust-card">
             <strong>⚠ Blank or black source in OBS?</strong>
-            <p>OBS uses its own Chromium trust store and may block the local self-signed HTTPS certificate. Trust <span class="mono">certs/local-cert.pem</span> once in Windows PowerShell, then restart OBS:</p>
-            <code id="obs-cert-cmd">Import-Certificate -FilePath .\certs\local-cert.pem -CertStoreLocation Cert:\CurrentUser\Root</code>
+            <div class="segments obs-os-tabs" role="tablist" aria-label="Operating system">
+              <button type="button" data-obs-os="win32" role="tab" aria-selected="true" class="active">Windows</button>
+              <button type="button" data-obs-os="darwin" role="tab" aria-selected="false">macOS</button>
+              <button type="button" data-obs-os="linux" role="tab" aria-selected="false">Linux</button>
+            </div>
+            <p id="obs-cert-intro">Run once in PowerShell from the LensPipe folder, then restart OBS:</p>
+            <code id="obs-cert-cmd">Import-Certificate -FilePath '.\certs\local-cert.pem' -CertStoreLocation Cert:\CurrentUser\Root</code>
             <button id="obs-copy-cert" type="button" class="copy-button secondary-button small-button with-icon ico-copy">Copy command</button>
-            <small>Only trust a certificate generated on your own PC. On macOS, trust <span class="mono">certs/local-cert.pem</span> in Keychain Access.</small>
+            <small id="obs-cert-note">Only trust a certificate generated on your own PC.</small>
           </aside>
         </div>
         <footer><span>Tip: Shift-click “OBS source” in the top bar to open /obs directly.</span><a href="/obs" target="_blank" rel="noopener noreferrer">Open /obs in new tab ↗</a></footer>
