@@ -48,12 +48,13 @@
   background: var(--bg); border-top: var(--ancho) solid var(--borde);
 }
 .camera-controls > * { max-width: 560px; margin-left: auto; margin-right: auto; }
-.lens-buttons { display: flex; margin-bottom: 12px; border: var(--ancho) solid var(--borde); border-radius: var(--r); overflow: hidden; background: var(--hoja); }
+.lens-buttons { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 12px; border: var(--ancho) solid var(--borde); border-radius: var(--r); overflow: hidden; background: var(--borde); }
 .lens-buttons:empty { display: none; }
-.lens-buttons button { flex: 1 1 0; min-width: 0; min-height: 40px; padding: 0 6px; border: 0; border-left: 2px solid var(--borde); background: none;
-  color: var(--tinta); font-size: .95rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lens-buttons button:first-child { border-left: 0; }
+.lens-buttons button { flex: 1 0 auto; min-width: 0; max-width: 100%; min-height: 40px; padding: 0 8px; border: 0; background: var(--hoja);
+  color: var(--tinta); font-size: .92rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lens-buttons button.active { background: var(--amarillo); }
+.lens-buttons button:disabled { opacity: 1; color: color-mix(in srgb, var(--tinta) 45%, var(--hoja)); }
+.lens-buttons button.active:disabled { background: color-mix(in srgb, var(--amarillo) 50%, var(--hoja)); }
 
 .primary-actions { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .glass-button, .blackout-button {

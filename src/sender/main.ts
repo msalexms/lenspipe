@@ -1311,24 +1311,32 @@ class CameraSender {
       .sort((a, b) => ((order(labels[a]) + 6) % 6) - ((order(labels[b]) + 6) % 6) || a - b);
   }
 
-  private renderLenses(): void {
-    const container = $('lens-buttons');
-    container.replaceChildren();
+  /** Lenses shown in the UI (iPhone and PC studio): deduplicated Auto and Camera-app order. */
+  private visibleLensEntries(): Array<{ deviceId: string; label: string; detail: string }> {
     const labels = this.getLensLabels();
     const visible = this.visibleLenses(labels);
     const autoCount = visible.filter((index) => labels[index].startsWith('Auto')).length;
-    for (const index of visible) {
+    return visible.map((index) => {
       const device = this.lenses[index];
+      // A single Auto entry needs no "(2)" suffix.
+      const label = autoCount === 1 && labels[index].startsWith('Auto') ? 'Auto' : labels[index];
+      return { deviceId: device.deviceId, label, detail: device.label || label };
+    });
+  }
+
+  private renderLenses(): void {
+    const container = $('lens-buttons');
+    container.replaceChildren();
+    for (const entry of this.visibleLensEntries()) {
       const button = document.createElement('button');
       button.type = 'button';
-      // A single Auto entry needs no "(2)" suffix.
-      button.textContent = autoCount === 1 && labels[index].startsWith('Auto') ? 'Auto' : labels[index];
-      button.title = device.label || button.textContent;
-      const active = device.deviceId === this.selectedLens;
+      button.textContent = entry.label;
+      button.title = entry.detail;
+      const active = entry.deviceId === this.selectedLens;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
       button.addEventListener('click', () => {
-        if (device.deviceId !== this.selectedLens) this.enqueue(() => this.switchCamera(device.deviceId));
+        if (entry.deviceId !== this.selectedLens) this.enqueue(() => this.switchCamera(entry.deviceId));
       });
       container.append(button);
     }
@@ -1926,7 +1934,6 @@ class CameraSender {
   private sendState(): void {
     if (document.getElementById('encoder-active')) $('encoder-active').textContent = this.encoderStatusText();
     if (!this.socket.isOpen) return;
-    const labels = this.getLensLabels();
     this.socket.send(encodeControl({
       type: 'sender-state',
       settings: {
@@ -1955,7 +1962,7 @@ class CameraSender {
         exposureEv: this.exposureEv,
         softwareEv: this.softwareEv(),
       },
-      lenses: this.lenses.map((device, index) => ({ deviceId: device.deviceId, label: labels[index], detail: device.label })),
+      lenses: this.visibleLensEntries(),
       microphones: this.microphones.map((device) => ({ deviceId: device.deviceId, label: device.label })),
       capabilities: this.track?.getCapabilities?.() || {},
       trackSettings: this.track?.getSettings() || {},

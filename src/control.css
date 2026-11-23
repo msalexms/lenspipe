@@ -78,6 +78,7 @@ kbd { margin-left: 4px; padding: 0 5px; border: 1.5px solid currentColor; border
 .control-section { padding-top: 16px; }
 .section-title { display: block; margin: 0 0 6px 2px; }
 .small-button { min-height: 34px; padding: 0 12px; font-size: .86rem; }
+.icon-button { width: var(--alto-btn); padding: 0; }
 
 /* segmented buttons (lens, aspect): yellow when chosen */
 .segments { display: flex; flex: 0 1 auto; min-width: 0; border: var(--ancho) solid var(--borde); border-radius: var(--r); overflow: hidden; background: var(--hoja); }
@@ -90,7 +91,13 @@ kbd { margin-left: 4px; padding: 0 5px; border: 1.5px solid currentColor; border
 .segments-empty { padding: 7px 12px; font-size: .86rem; color: var(--gris); white-space: nowrap; }
 .lens-row { flex-wrap: wrap; }
 .lens-row .row-label { flex-basis: 100%; }
-.lens-row .segments { flex: 1 1 100%; }
+.lens-row .segments { flex: 1 1 100%; flex-wrap: wrap; gap: 2px; background: var(--borde); }
+.lens-row .segments button { flex: 1 0 auto; max-width: 100%; padding: 0 8px; border-left: 0; background: var(--hoja); font-size: .86rem; }
+.lens-row .segments button:hover:not(:disabled) { background: var(--sel); }
+.lens-row .segments button.active { background: var(--amarillo); }
+.lens-row .segments button:disabled { opacity: 1; color: color-mix(in srgb, var(--tinta) 45%, var(--hoja)); }
+.lens-row .segments button.active:disabled { background: color-mix(in srgb, var(--amarillo) 50%, var(--hoja)); }
+.lens-row .segments-empty { flex: 1 1 100%; background: var(--hoja); }
 .segment-control { width: 150px; }
 
 /* stream box: caption + Settings → on one line, the settings as a cajetín */
@@ -110,7 +117,9 @@ kbd { margin-left: 4px; padding: 0 5px; border: 1.5px solid currentColor; border
 
 .panel-footer { display: block; margin-top: 14px; padding: 0 2px; font: 500 .76rem/1.7 var(--mono); color: var(--gris); }
 .panel-footer span { display: block; }
-.panel-footer .signature { margin-top: 12px; padding-top: 10px; border-top: 1.5px solid var(--linea); font-family: var(--sans); }
+.footer-brand { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1.5px solid var(--linea); font-family: var(--sans); }
+.text-link { padding: 0; border: 0; background: none; color: var(--tinta); font: 800 .78rem var(--sans); text-decoration: underline; text-underline-offset: 3px; }
+.text-link:hover { color: var(--marca); }
 
 /* dialogs: a cream box on top, with a hard shadow */
 dialog {
@@ -184,6 +193,16 @@ dialog::backdrop { background: rgba(30, 27, 46, .5); }
 .modal-card > footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; margin-top: 18px; font-size: .88rem; color: var(--gris); }
 .modal-card > footer a { color: var(--tinta); font-weight: 800; text-underline-offset: 3px; }
 
+dialog.about-dialog { width: min(680px, calc(100vw - 32px)); }
+.about-brand-card { display: flex; align-items: center; gap: 20px; padding: 18px 20px; background: var(--hoja); border: var(--ancho) solid var(--borde); border-radius: var(--r); box-shadow: var(--sombra); }
+.about-seal { display: block; flex: none; }
+.about-copy { min-width: 0; }
+.about-copy strong { display: block; font: 800 1.2rem/1.2 var(--titulos); color: var(--tinta); }
+.about-copy p { margin-top: 6px; font-size: .92rem; line-height: 1.5; color: var(--tinta2); }
+.about-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.about-specs { margin-top: 18px; }
+.about-specs dd { white-space: normal; }
+
 #studio-toast {
   position: fixed; left: 50%; bottom: 24px; z-index: 50; max-width: min(640px, calc(100vw - 32px));
   padding: 10px 16px; border-radius: var(--r); background: var(--tinta); color: #fff; font-size: .9rem; font-weight: 700; box-shadow: 3px 3px 0 #8A86A0;
@@ -204,7 +223,7 @@ dialog::backdrop { background: rgba(30, 27, 46, .5); }
   .studio-header { min-height: 60px; padding: 8px 14px; gap: 10px; }
   .studio-brand { font-size: 1.2rem; }
   .studio-brand .thor { width: 30px; height: 30px; }
-  .studio-brand span, #header-settings { display: none; }
+  .studio-brand span, #header-settings, #header-about { display: none; }
   .status-chip { margin-right: 0; }
   .status-chip > span { display: none; }
   .header-actions { gap: 8px; }
@@ -227,6 +246,8 @@ dialog::backdrop { background: rgba(30, 27, 46, .5); }
   .modal-card > header > svg { display: none; }
   .endpoint { grid-template-columns: minmax(100px, 35%) minmax(0, 1fr); }
   .endpoint canvas { width: 100% !important; height: auto !important; aspect-ratio: 1; }
+  .about-brand-card { flex-direction: column; align-items: flex-start; gap: 14px; padding: 16px; }
+  .about-seal { width: 76px; height: 76px; }
 }
 @media (prefers-reduced-motion: reduce) {
   #studio-toast { transform: translate(-50%, 0); transition: opacity .2s; }
