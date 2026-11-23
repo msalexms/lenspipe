@@ -107,7 +107,7 @@ export function describeIssue(kind: HealthKind, sample: HealthSample): HealthIss
     const link = sample.transport === 'USB' ? 'The USB link' : sample.transport === 'Wi-Fi' ? 'Wi-Fi' : 'The network';
     const facts: string[] = [];
     if (sample.rttMs != null && sample.rttMs > 100) facts.push(`RTT ${Math.round(sample.rttMs)} ms`);
-    if (sample.bufferedMs > 100) facts.push(`${Math.round(sample.bufferedMs)} ms queued on the iPhone`);
+    if (sample.bufferedMs > 100) facts.push(`${Math.round(sample.bufferedMs)} ms queued on the phone`);
     if (sample.networkDrops > 0) facts.push(`${sample.networkDrops} frames/s skipped`);
     const bitrate = lowerBitrate(settings, sample.relayMbps);
     const advice = sample.transport === 'Wi-Fi' ? ' A USB cable carries far more.' : '';
@@ -122,8 +122,8 @@ export function describeIssue(kind: HealthKind, sample: HealthSample): HealthIss
     const targetFps = PRESETS[settings.preset].frameRate;
     return {
       kind,
-      title: `The iPhone can't encode ${format} in real time`,
-      detail: `${sample.senderFps} of ${targetFps} fps, encoder queue ${sample.encoderQueue}. Heat and Low Power Mode make this worse.`,
+      title: `The phone can't encode ${format} in real time`,
+      detail: `${sample.senderFps} of ${targetFps} fps, encoder queue ${sample.encoderQueue}. Heat and battery-saver mode make this worse.`,
       ...presetAction(settings),
     };
   }

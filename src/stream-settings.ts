@@ -40,7 +40,7 @@ export const PRESETS = {
 } as const satisfies Record<string, { width: number; height: number; frameRate: number; ratio: AspectRatio; photoMode: boolean; label: string }>;
 
 /** Shown wherever a 4:3 photo mode is selected or active. */
-export const PHOTO_MODE_WARNING = 'Photo mode: the whole 4:3 sensor, but the iPhone does not apply its video processing (noise reduction, video HDR, tone mapping), so the picture is noisier and flatter than the 16:9 formats.';
+export const PHOTO_MODE_WARNING = 'Photo mode: the whole 4:3 sensor, with less of the phone’s video processing (noise reduction, video HDR, tone mapping), so the picture can be noisier and flatter than the 16:9 formats.';
 export type PresetName = keyof typeof PRESETS;
 export type Preset = (typeof PRESETS)[PresetName];
 
@@ -49,7 +49,7 @@ export function presetSize(preset: Preset, orientation: Orientation): { width: n
   return orientation === 'portrait' ? { width: preset.height, height: preset.width } : { width: preset.width, height: preset.height };
 }
 
-export const MIN_BITRATE = 20_000_000;
+export const MIN_BITRATE = 10_000_000;
 export const MAX_BITRATE = 200_000_000;
 
 /**
@@ -172,6 +172,26 @@ export function encodeRotation(target: number, bufferRotation: number, width: nu
   return landscape === (orientation === 'landscape') ? rotation : quarterTurns(rotation + 90);
 }
 
+/**
+ * Rotation to send for a non-iOS camera frame (Android Chrome, desktop).
+ * Android Chrome delivers frames already rotated upright (`display === 0`, portrait when held upright,
+ * landscape when held sideways). When the frame shape already matches `orientation`, only `turned` (0° or
+ * 180°) applies; when held across the chosen aspect, add a quarter turn so output keeps the chosen aspect.
+ * When a non-zero sensor `display` rotation is provided, honour it whenever it yields the chosen aspect.
+ */
+export function uprightEncodeRotation(
+  width: number,
+  height: number,
+  display: number,
+  orientation: Orientation,
+  turned: boolean,
+): number {
+  const base = quarterTurns(display + (turned ? 180 : 0));
+  const quarter = base % 180 !== 0;
+  const landscape = (quarter ? height : width) >= (quarter ? width : height);
+  return landscape === (orientation === 'landscape') ? base : quarterTurns(base + 90);
+}
+
 /** Where a normalized point of a picture lands after the picture is turned clockwise by `rotation`. */
 /**
  * Whether the picture comes out the right way up. `target` is the rotation sent (from the chosen aspect and
@@ -212,6 +232,16 @@ export function h264Codec(width: number, height: number, frameRate: number, bitr
   ];
   const level = levels.find(([, maxFrame, maxRate, maxBitrate]) => frameMbs <= maxFrame && frameMbs * frameRate <= maxRate && bitrate <= maxBitrate)?.[0] ?? 60;
   return `avc1.6400${level.toString(16).toUpperCase().padStart(2, '0')}`;
+}
+
+/**
+ * H.264 codec strings, best first: High profile (default on iPhone & flagship Android), then Main, then
+ * Constrained Baseline for Android MediaCodec hardware encoders that reject High profile.
+ */
+export function h264Codecs(width: number, height: number, frameRate: number, bitrate: number): string[] {
+  const high = h264Codec(width, height, frameRate, bitrate);
+  const level = high.slice(-2);
+  return [high, `avc1.4D40${level}`, `avc1.42E0${level}`];
 }
 
 /** HEVC Main profile strings, best first: High tier for high bitrates, level 6.0 above 8.9 MP luma. */

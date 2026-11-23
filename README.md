@@ -1,23 +1,23 @@
-# iPhone Camera Link
+# Camera Link
 
 <sub>**An AMSTech project** · Open source · MIT</sub>
 
-Use your iPhone as a low-latency studio camera on your PC and in OBS, over a USB cable or Wi-Fi. It runs entirely on your own network with **WebCodecs and binary WebSockets**: no app to install on the iPhone, no cloud relay, no account, no WebRTC, no UI framework and no browser extension.
+Use your phone (**iPhone or Android**) as a low-latency studio camera on your PC and in OBS, over a USB cable or Wi-Fi. It runs entirely on your own network with **WebCodecs and binary WebSockets**: no app to install on the phone, no cloud relay, no account, no WebRTC, no UI framework and no browser extension.
 
 <p align="center">
   <img src="docs/screenshots/control-desktop.png" alt="PC studio with live preview, telemetry and remote camera controls" width="720">
-  <img src="docs/screenshots/sender-controls-mobile.png" alt="iPhone sender with lens, torch, mic and OLED-off controls" width="220">
+  <img src="docs/screenshots/sender-controls-mobile.png" alt="Phone sender with lens, torch, mic and OLED-off controls" width="220">
 </p>
 
 - Fastify HTTPS server with automatic first-run certificate generation
 - Separate, continuously refreshed USB tethering and Wi-Fi/LAN URLs + QR codes
-- H.264 High or HEVC, with the lowest codec level that fits each format; HEVC High tier above 40 Mbps; 20–200 Mbps
-- VBR or CBR, and a **quality** (lookahead) or **realtime** encoder mode, each with automatic fallback
-- End-to-end flow control: the server acknowledges received bytes (coalesced to at most one acknowledgement per 25 ms, and flushed within 1 s when the stream pauses), and the iPhone skips frames before encoding when more than about 250 ms of video — measured at the encoder's *actual* output rate — is unacknowledged. A link slower than the bitrate costs frames, not ever-growing lag.
-- One-tap **Max quality** / **Low latency** profiles; settings live in a dedicated dialog on both the iPhone and the PC, and the iPhone remembers them
-- 16:9 video modes (4K60, 4K30, 1080p60, 1080p30) with the iPhone's full video processing, plus 4:3 full-sensor photo modes (12 MP, 1920×1440, 1440×1080) marked with a warning, in landscape or portrait
-- Fixed output orientation that never flips by itself, a 180° turn for upside-down mounts, and a warning on the iPhone and in the studio when the phone is held the wrong way
-- iPhone lens hot-swap, zoom, torch, focus/exposure, microphone, and OLED blackout
+- H.264 (High, Main, or Constrained Baseline fallback) or HEVC, with the lowest codec level that fits each format; HEVC High tier above 40 Mbps; 10–200 Mbps
+- VBR or CBR, and a **quality** (lookahead) or **realtime** encoder mode, plus bitrate and resolution fallbacks for device encoders
+- End-to-end flow control: the server acknowledges received bytes (coalesced to at most one acknowledgement per 25 ms, and flushed within 1 s when the stream pauses), and the phone skips frames before encoding when more than about 250 ms of video — measured at the encoder's *actual* output rate — is unacknowledged. A link slower than the bitrate costs frames, not ever-growing lag.
+- One-tap **Max quality** / **Low latency** profiles; settings live in a dedicated dialog on both the phone and the PC, and the phone remembers them
+- 16:9 video modes (4K60, 4K30, 1080p60, 1080p30) with the phone's full video processing, plus 4:3 full-sensor photo modes (12 MP, 1920×1440, 1440×1080) marked with a warning, in landscape or portrait
+- Fixed output orientation that never flips by itself, a 180° turn for upside-down mounts, and a warning on the phone and in the studio when the phone is held the wrong way
+- Phone lens hot-swap, zoom, torch, focus/exposure, microphone, and OLED blackout
 - Hardware-preferred canvas decoding, zero-copy server frame forwarding, and live telemetry
 - Full-screen `/obs` source with cached codec configurations and automatic reconnection
 
@@ -37,9 +37,11 @@ Anyone who has the pairing key can watch the camera, so treat the QR code and th
 ## Requirements
 
 - **PC:** Node.js 20+ and npm (verified on Node 22)
-- **Phone:** a recent iOS Safari with WebCodecs `VideoEncoder` support (iOS 16.4+; a current iOS release is recommended)
-- **USB:** an iPhone data cable and Personal Hotspot support
-- **Network:** PC and iPhone on the same unrestricted LAN when using Wi-Fi. Disable AP/client isolation.
+- **Phone:** iOS Safari 16.4+ or Android Chrome / Edge with WebCodecs `VideoEncoder` support
+- **USB:** a data/sync cable with **Personal Hotspot** (iPhone) or **USB tethering** (Android)
+- **Network:** PC and phone on the same unrestricted LAN when using Wi-Fi. Disable AP/client isolation.
+
+> **Device notes:** Designed and tested thoroughly on iPhone (Safari) and verified on Android (Samsung Galaxy A57, Chrome). On Android, secondary lens exposure, HEVC support, and maximum encoding bitrates depend on each phone's hardware encoder and browser exposure — Camera Link automatically falls back across H.264 profiles (High → Main → Constrained Baseline), bitrates, and frame sizes.
 
 ## Start
 
@@ -66,75 +68,73 @@ certs/local-cert.pem
 
 Both files are gitignored. For the best persistent-trust experience, connect the intended USB/Wi-Fi interface **before the first certificate generation**, so its IP address is included in the certificate. If you change PCs or need to regenerate it, stop the server, remove the generated `certs` directory, and start again.
 
-## Connect the iPhone
+## Connect the phone
 
-In the studio, choose **Connect iPhone**. USB is listed first when detected; interface scanning continues every three seconds, including after a cable is attached.
+In the studio, choose **Connect phone**. USB is listed first when detected; interface scanning continues every three seconds, including after a cable is attached.
 
 ### USB cable (preferred)
 
-1. Connect the iPhone to the PC with a data/sync cable and tap **Trust** if iOS asks.
-2. On iPhone, open **Settings → Personal Hotspot**, enable **Allow Others to Join**, and leave that page open briefly while the interface appears. Cellular service is not required for the local video path.
-3. Scan the **USB Cable** QR code, or copy the URL shown by the app. It looks like `https://172.20.10.x:8443/sender#k=…` and includes the pairing key.
-4. Keep Personal Hotspot enabled while streaming.
+- **iPhone:** connect the cable, tap **Trust** if iOS asks, and open **Settings → Personal Hotspot → Allow Others to Join** (leave that screen open briefly while the interface appears; cellular service is not required for the local video path, and keep Personal Hotspot enabled while streaming).
+- **Android:** connect the cable and enable **USB tethering** in Android Settings (often under **Connections → Mobile Hotspot and Tethering**). Windows detects RNDIS / USB-NCM tethering adapters automatically.
+- Scan the **USB cable** QR code, or copy the URL shown by the app (on iPhone it looks like `https://172.20.10.x:8443/sender#k=…`) and include the pairing key.
 
-**If the USB page never loads on the iPhone:** Windows puts the new iPhone network ("Apple Mobile Device Ethernet") on the **Public** profile, while the firewall prompt only allowed Node.js on **Private** networks. The server detects this, prints the fix in its console, and shows it in **Connect iPhone**. To fix it, run the shown command once in an administrator PowerShell. It opens only the app's port, only to the iPhone's USB subnet:
+**If the USB page never loads on the phone:** Windows often puts a new phone USB adapter (such as "Apple Mobile Device Ethernet" or an Android RNDIS adapter) on the **Public** profile, while the firewall prompt only allowed Node.js on **Private** networks. The server detects this, prints the fix in its console, and shows it in **Connect phone**. To fix it, run the shown command once in an administrator PowerShell. It opens only the app's port, only to that USB subnet:
 
 ```powershell
 New-NetFirewallRule -DisplayName 'Camera Link (local sender)' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8443 -RemoteAddress 172.20.10.0/28 -Profile Public
 ```
 
-Alternatively, set that adapter's network profile to Private (**Settings → Network & internet → Ethernet → the Apple adapter → Network profile type**).
+Alternatively, set that adapter's network profile to Private (**Settings → Network & internet → Ethernet → the USB adapter → Network profile type**).
 
 ### Wi-Fi / LAN
 
-1. Put the iPhone and PC on the same LAN.
-2. Scan the **Wi-Fi LAN** QR code, or copy the URL shown by the app (`https://192.168.x.x:8443/sender#k=…`).
-3. If the iPhone says **Not paired**, scan the QR code again. This can happen when Safari drops the key while you accept the certificate warning.
+1. Put the phone and PC on the same LAN.
+2. Scan the **Wi-Fi / LAN** QR code, or copy the URL shown by the app (`https://192.168.x.x:8443/sender#k=…`).
+3. If the phone says **Not paired**, scan the QR code again. This can happen when a browser drops the fragment key while you accept the certificate warning.
 4. If the phone cannot connect, check the Windows firewall, VPN virtual adapters, guest-network isolation, and the PC's active network interface.
 
-The defaults aim for the best picture with the least fuss: **4K30, 16:9, H.264, 60 Mbps, VBR, quality mode**. **Restore defaults** at the bottom of the iPhone settings brings them back. On a busy Wi-Fi network, use the **Low latency** profile (1080p60, H.264, 40 Mbps, CBR, realtime). Over USB, **Max quality** (4K30, HEVC, 80 Mbps, VBR, quality mode) gives the most detail. On Windows the iPhone's USB network adapter links at 100 Mbps, so bitrates near or above that cannot fit through the cable. If the link, the iPhone encoder or the PC falls behind for a few seconds, both the iPhone and the studio show a warning. The warning names the cause (link saturated, iPhone encoder saturated, or PC not drawing fast enough) and has a one-tap fix: a lower bitrate based on what actually got through, a lighter format, or H.264.
+The defaults aim for the best picture with the least fuss: **4K30, 16:9, H.264, 60 Mbps, VBR, quality mode**. **Restore defaults** at the bottom of the phone settings brings them back. On a busy Wi-Fi network, use the **Low latency** profile (1080p60, H.264, 40 Mbps, CBR, realtime). Over USB, **Max quality** (4K30, HEVC, 80 Mbps, VBR, quality mode) gives the most detail. On Windows, iPhone's USB network adapter links at 100 Mbps, so bitrates near or above that cannot fit through that cable. If the link, the phone encoder or the PC falls behind for a few seconds, both the phone and the studio show a warning. The warning names the cause (link saturated, phone encoder saturated, or PC not drawing fast enough) and has a one-tap fix: a lower bitrate based on what actually got through, a lighter format, or H.264.
 
-### Trust the local certificate on iOS
+### Trust the local certificate
 
-The certificate is generated locally and is not issued by a public CA. Safari's warning is expected.
+The certificate is generated locally and is not issued by a public CA. Your browser's warning is expected.
 
-**Fast, per-site option:** on the Safari warning page, open **Show Details / Advanced**, review the address, and choose **visit this website**. Camera and WebCodecs access then work on that accepted HTTPS origin.
-
-**Persistent trust option:** transfer only `certs/local-cert.pem` to your own iPhone (AirDrop or a cable), open it, and approve the downloaded profile in iOS Settings. Then enable it under **Settings → General → About → Certificate Trust Settings**. Never transfer `local-key.pem`, and only trust a certificate you generated on your own PC.
+- **Fast, per-site option (iOS Safari & Android Chrome):** open **Show Details / Advanced**, verify the local IP address, and choose **visit this website** / **Proceed to … (unsafe)**. Camera and WebCodecs access then work on that accepted HTTPS origin.
+- **Persistent trust option (iOS):** transfer only `certs/local-cert.pem` to your own iPhone (AirDrop or a cable), open it, and approve the downloaded profile in iOS Settings. Then enable it under **Settings → General → About → Certificate Trust Settings**. Never transfer `local-key.pem`, and only trust a certificate you generated on your own PC.
 
 QR codes and URLs use the PC's current IP; HTTPS itself does not require an internet connection.
 
-Upgrading from a version without certificate name constraints regenerates the certificate once on startup. Trust the new `local-cert.pem` again on the iPhone and in OBS.
+Upgrading from a version without certificate name constraints regenerates the certificate once on startup. Trust the new `local-cert.pem` again on your phone and in OBS.
 
 ## Use the sender
 
 Tap **Start camera** and grant access. Back lenses often appear only after this first permission grant.
 
 - Lens buttons swap capture without reconnecting the WebSocket.
-- **Formats.** The **16:9** formats (4K and 1080p, 30 or 60 fps) are iOS video modes. They get the iPhone's full video processing: temporal noise reduction, video HDR, tone mapping, and downscaling from the whole sensor. Use them for the best picture. The **4:3** formats are the whole sensor (12 MP 4032×3024 and 1920×1440 at 30 fps, 1440×1080 at 60 fps), with a wider field of view. Safari delivers them as photo modes, without most of that processing, so they look noisier and flatter. When one is selected, the iPhone settings, the studio settings dialog and the studio's stream summary show a warning. 12 MP may be cropped to the largest size the iPhone can encode, and needs a PC GPU that decodes H.264/HEVC level 6.0.
-- **Orientation.** iOS delivers every frame in sensor orientation and only tags it with how the phone is held. The app ignores that tag: the **16:9 / 9:16** button (4:3 / 3:4 for the 4:3 formats) alone decides the picture, at the full format size, and it never flips when the phone moves. Hold or mount the iPhone sideways for 16:9 and upright for 9:16. If it is mounted upside down, tap **Rotate 180°** on the iPhone or in the studio.
-- **Wrong-way warning.** When the iPhone is held across the chosen aspect, the picture arrives on its side. When it is held upside down, the picture arrives upside down. In both cases the iPhone and the studio show a warning after a moment, with a one-tap fix: switch to the other aspect, or rotate 180°. The warning relies on iOS knowing how the phone is held, so keep **Rotation Lock** off.
-- The iPhone preview is turned to show exactly what the PC receives. Switching the aspect or the turn never reopens the camera, and every choice is remembered. **Restore defaults** at the bottom of the iPhone settings brings back 4K30, 16:9, H.264, 60 Mbps, VBR and quality mode.
-- To see which formats your iPhone's Safari actually offers, open `/diag` on the iPhone, at the same address as `/sender`, and tap **Run test**. It measures every lens and saves a report to `diagnostics/` on the PC.
+- **Formats.** The **16:9** formats (4K and 1080p, 30 or 60 fps) use standard video modes with full camera processing. The **4:3** formats (12 MP 4032×3024, 1920×1440 at 30 fps, 1440×1080 at 60 fps) expose a wider field of view on phones that support them; on iPhone, Safari delivers them as photo modes with less video processing (noisier and flatter), so they carry a warning in the UI. 12 MP may be cropped to the largest size the phone can encode, and needs a PC GPU that decodes H.264/HEVC level 6.0.
+- **Orientation.** The **16:9 / 9:16** toggle (4:3 / 3:4 for 4:3 formats) alone decides the output picture and never flips by itself. On iOS (where frames arrive in sensor orientation and Safari only tags display orientation), the app ignores the orientation flip tag so the stream stays locked; on Android Chrome (where frames arrive upright for the phone's physical orientation), holding the phone upright with 16:9 chosen rotates the output rather than distorting it. Hold or mount the phone sideways for 16:9 and upright for 9:16. If mounted upside down, tap **Rotate 180°** on the phone or in the studio.
+- **Wrong-way warning.** On mobile, when the phone is held across the chosen aspect (or upside down), the phone and the studio show a warning after a moment with a one-tap fix (switch aspect or rotate 180°). Keep **Rotation Lock** off if you want live orientation hints.
+- The phone preview is turned to show exactly what the PC receives. Switching the aspect or the turn never reopens the camera, and every choice is remembered. **Restore defaults** at the bottom of the phone settings brings back 4K30, 16:9, H.264, 60 Mbps, VBR and quality mode.
+- To see which formats your phone's browser actually offers, open `/diag` on the phone, at the same address as `/sender`, and tap **Run test**. It measures every lens and saves a report to `diagnostics/` on the PC.
 - The torch stays on across lens and resolution changes. Resolution changes first try to resize the live camera track, which avoids reopening the camera. When a reopen is unavoidable, such as a lens change, the torch is turned back on afterwards.
-- **OLED off** displays a true all-black full-screen overlay. Press and hold anywhere for **two seconds** to leave it. Wake Lock and a silent-media fallback keep the page alive; locking iOS with the physical power button cannot be overridden by a web app. After unlocking, visibility/track recovery resumes capture.
-- **⚙ Settings** opens a sheet with quick profiles, format, codec, bitrate, rate control (VBR/CBR), encoder mode (quality/realtime), focus/exposure/EV and microphone source. Choices are stored on the iPhone and restored on the next visit.
-- The sheet's status line shows what the encoder actually accepted (codec string, rate control, mode) and how frames are captured. If Safari rejects a requested option, the sender falls back automatically: HEVC High tier → Main tier, quality → realtime, VBR ↔ CBR, and HEVC → H.264 last.
-- Frames are read with `MediaStreamTrackProcessor` inside a Worker on iOS Safari, which only exposes it there. That path reads every camera frame instead of copying from the `<video>` element at the display's pace; the `<video>` path remains as an automatic fallback.
-- **Microphone permission:** if Safari is denied the mic, turning it on shows how to allow it, on the iPhone and in the studio: **Settings → Apps → Safari → Microphone**, or in Safari **aA → Website Settings → Microphone → Allow**, then reload. If iOS keeps audio suspended because the mic was turned on from the PC, both screens ask for one tap on the iPhone.
+- **OLED off** displays a true all-black full-screen overlay. Press and hold anywhere for **two seconds** (or press **Escape** with a hardware keyboard) to leave it. Wake Lock and a silent-media fallback keep the page alive; locking the phone with the physical power button cannot be overridden by a web app. After unlocking, visibility/track recovery resumes capture.
+- **⚙ Settings** opens a sheet with quick profiles, format, codec, bitrate, rate control (VBR/CBR), encoder mode (quality/realtime), focus/exposure/EV and microphone source. Choices are stored on the phone and restored on the next visit.
+- The sheet's status line shows what the encoder actually accepted (codec string, rate control, mode) and how frames are captured. If a requested option is rejected, the sender falls back automatically: H.264 High → Main → Constrained Baseline, HEVC High tier → Main tier, quality → realtime, VBR ↔ CBR, HEVC → H.264, lower bitrates at full resolution, and cropped size as a last resort.
+- Frames are read with `MediaStreamTrackProcessor` on the main thread (Android Chrome / Chromium), inside a Worker on iOS Safari (which only exposes it there), or by copying from the `<video>` element as an automatic fallback.
+- **Microphone permission:** if the browser denies the mic, turning it on shows how to allow it, on the phone and in the studio (in iOS Safari via Settings / `aA → Website Settings`, or via the site permissions icon in Chrome). If a mobile browser keeps audio suspended because the mic was turned on from the PC, both screens ask for one tap on the phone.
 - Microphone capture disables echo cancellation, noise suppression, and automatic gain control. Audio is low-latency mono **16-bit PCM** over `AudioWorklet`, not AAC. Video-only mode omits audio packets completely for approximately 0.77 Mbps less traffic at 48 kHz.
 
 ## PC studio and remote control
 
 `/control` receives live frames. The side panel keeps the live controls (lens, torch, mic/mute, orientation, zoom, EV) plus a stream summary; **⚙ Settings** opens the dialog with profiles, resolution/FPS, codec, bitrate, rate control, encoder mode, focus/exposure modes and microphone source. **Force keyframe** stays on the main view. Telemetry distinguishes USB/Wi-Fi, server-measured video throughput, application-level WebSocket ping RTT, FPS, queues, decoded frames, and dropped frames.
 
-The FRAME RATE tile also shows **PC** latency: the time from a frame arriving in the tab to being drawn. With a GPU decoder it should stay at a few milliseconds. To measure it from the command line while the iPhone streams, run `npm run measure:pc`.
+The FRAME RATE tile also shows **PC** latency: the time from a frame arriving in the tab to being drawn. With a GPU decoder it should stay at a few milliseconds. To measure it from the command line while the phone streams, run `npm run measure:pc`.
 
-**Low-delay H.264 output.** In "quality" mode Safari's encoder writes an H.264 SPS without VUI `bitstream_restriction`. A standards-compliant decoder must then assume frames can be reordered, so it holds a full decoded picture buffer before showing anything: 13 frames (~430 ms at 30 fps) for 1080p. The iPhone never reorders frames, so the receiver rewrites the SPS to declare `max_num_reorder_frames = 0` (`src/h264-sps.ts`). Measured on an RTX 2060 SUPER, this took the PC-side delay from ~430 ms to 1–2 ms. If a stream ever does reorder frames, the receiver detects it and falls back to the original SPS. HEVC streams already declare zero reordering and are not affected.
+**Low-delay H.264 output.** In "quality" mode iOS Safari's encoder writes an H.264 SPS without VUI `bitstream_restriction`. A standards-compliant decoder must then assume frames can be reordered, so it holds a full decoded picture buffer before showing anything: 13 frames (~430 ms at 30 fps) for 1080p. Because the phone stream never reorders frames, the receiver rewrites the SPS to declare `max_num_reorder_frames = 0` (`src/h264-sps.ts`). Measured on an RTX 2060 SUPER, this took the PC-side delay from ~430 ms to 1–2 ms. If a stream ever does reorder frames, the receiver detects it and falls back to the original SPS. HEVC streams already declare zero reordering and are not affected.
 
-In "realtime" mode Safari caps the encoder at about 15 Mbps whatever bitrate is requested, so "quality" is the mode that actually uses high bitrates. Its lookahead costs only ~11 ms on the iPhone.
+In "realtime" mode iOS Safari caps the encoder at about 15 Mbps whatever bitrate is requested, so "quality" is the mode that actually uses high bitrates. Its lookahead costs only ~11 ms on iPhone.
 
-Studio sound is off until you click **Preview audio**. The status next to that button shows whether the iPhone mic is off, blocked or waiting for a tap, whether audio is arriving, the current buffer, and any dropouts. Audio shares the connection with large video frames, so it arrives in bursts. The player's jitter buffer adapts: it starts at 60 ms, grows by 20 ms after each dropout (up to 250 ms), and shrinks again after 5 s without one. With the server running, `npm run test:audio` plays a bursty simulated microphone in a real Chrome and checks it stays dropout-free. H.264 High is the safest compatibility choice; native HEVC WebCodecs decoding depends on OS/browser and GPU support.
+Studio sound is off until you click **Preview audio**. The status next to that button shows whether the phone mic is off, blocked or waiting for a tap, whether audio is arriving, the current buffer, and any dropouts. Audio shares the connection with large video frames, so it arrives in bursts. The player's jitter buffer adapts: it starts at 60 ms, grows by 20 ms after each dropout (up to 250 ms), and shrinks again after 5 s without one. With the server running, `npm run test:audio` plays a bursty simulated microphone in a real Chrome and checks it stays dropout-free. H.264 High is the safest compatibility choice; native HEVC WebCodecs decoding depends on OS/browser and GPU support.
 
 ## OBS Studio
 
@@ -147,7 +147,7 @@ Studio sound is off until you click **Preview audio**. The status next to that b
 
    Click **OBS source** in the studio to copy the exact URL, which includes the pairing key. Shift-click it to preview locally.
 3. Set width/height to your OBS canvas (for example 1920×1080), then enable **Refresh browser when scene becomes active** if desired.
-4. Enable **Control audio via OBS** if you want the iPhone microphone on the Browser source's audio meter.
+4. Enable **Control audio via OBS** if you want the phone microphone on the Browser source's audio meter.
 
 The view is a borderless black canvas with automatic aspect-ratio containment, so it handles both landscape and portrait without UI changes.
 
@@ -198,11 +198,11 @@ npm run screenshots   # regenerate the README images in docs/screenshots/
 npm run test:audio    # bursty simulated microphone must play without dropouts
 ```
 
-The decoder regression test verifies fatal-error reconfiguration, dropped-delta reference purging, and keyframe recovery. The relay smoke test checks HTTPS pages/worklets, cached configurations, byte-identical keyframe relay, two-way commands, and live throughput. Camera encoding still needs to be tested on the target iPhone because desktop hardware cannot emulate iOS lens behavior or WebCodecs support.
+The decoder regression test verifies fatal-error reconfiguration, dropped-delta reference purging, and keyframe recovery. The relay smoke test checks HTTPS pages/worklets, cached configurations, byte-identical keyframe relay, two-way commands, and live throughput. Camera encoding still needs to be tested on a real phone (iPhone or Android) because desktop hardware cannot emulate mobile lens behavior or mobile WebCodecs encoders.
 
 ## Design
 
-The interface follows the AMSTech brand (manual v1.5, «stickers only»): cream paper (`#FFF6E9`), white boxes with a 2.5 px ink border (`#1E1B2E`), hard shadows and 6 px corners, one blue primary button per screen (`#2B36D9`) and yellow (`#FFE27A`) for what is selected and for warnings. Titles use **Bricolage Grotesque**, text **Figtree** and figures **DM Mono**. The head of Thor is the logo and the blue camera is this project's sticker; Thor's ears only appear on the USB steps bar of the connection dialog. Switches and segmented buttons show state (the hidden ON / OFF text is kept for screen readers), sliders fill in blue up to their value, the stream summary is a small data grid (cajetín), and the camera buttons on the iPhone are boxed keys with line icons. The interface is always light.
+The interface follows the AMSTech brand (manual v1.5, «stickers only»): cream paper (`#FFF6E9`), white boxes with a 2.5 px ink border (`#1E1B2E`), hard shadows and 6 px corners, one blue primary button per screen (`#2B36D9`) and yellow (`#FFE27A`) for what is selected and for warnings. Titles use **Bricolage Grotesque**, text **Figtree** and figures **DM Mono**. The head of Thor is the logo and the blue camera is this project's sticker; Thor's ears only appear on the USB steps bar of the connection dialog. Switches and segmented buttons show state (the hidden ON / OFF text is kept for screen readers), sliders fill in blue up to their value, the stream summary is a small data grid (cajetín), and the camera buttons on the phone are boxed keys with line icons. The interface is always light.
 
 Colours, fonts and shapes come from the shared AMSTech package in `src/amstech-ui/` (tokens, components and fonts; replace the folder to update it). What is specific to this app lives in `src/shared.css`, `src/control.css` and `src/sender.css`; `src/amstech-ui.ts` paints the sliders and draws the steps bar. The icons are CSS masks, so buttons whose text the code rewrites keep their icon.
 
@@ -212,7 +212,7 @@ The fonts are bundled by Vite from `src/amstech-ui/fuentes/` (SIL Open Font Lice
 
 ```text
 server/                 Fastify HTTPS, certificates, pairing, network scanner, binary relay
-src/sender/             iPhone capture/encoder and hardware controls
+src/sender/             Phone capture/encoder and hardware controls (iOS & Android)
 src/control/            PC dashboard and QR connection flow
 src/obs/                Minimal OBS source
 src/receiver.ts         Shared VideoDecoder and PCM playback pipeline
@@ -224,7 +224,7 @@ docs/screenshots/       README images (npm run screenshots)
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a pull request, run `npm run typecheck` and `npm test`. If you change the interface, also run `npm run test:ui`. Camera and encoder changes need a test on a real iPhone, because desktop browsers cannot emulate iOS lenses or Safari's WebCodecs encoder. Please say which iPhone model and iOS version you tested on.
+Issues and pull requests are welcome. Before opening a pull request, run `npm run typecheck` and `npm test`. If you change the interface, also run `npm run test:ui`. Camera and encoder changes need a test on a real phone, because desktop browsers cannot emulate mobile lenses or mobile WebCodecs encoders. Please say which phone model, browser, and OS version you tested on.
 
 ## License
 

@@ -30,22 +30,24 @@ export interface NetworkSnapshot {
   updatedAt: number;
 }
 
-const USB_PATTERN = /apple|iphone|ipad|usb|remote ndis|rndis/i;
+const USB_PATTERN = /apple|iphone|ipad|android|usb|remote ndis|rndis/i;
+const USB_DESC_PATTERN = /apple mobile device|iphone|ipad|remote ndis|rndis|android|usb ncm|samsung.*mobile.*usb|google.*pixel/i;
 const WIFI_NAME_PATTERN = /wi-?fi|wlan|wireless|airport/i;
 const HOTSPOT_IP_PATTERN = /^172\.20\.1[01]\./;
 const PRIVATE_PATTERNS = [/^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./];
 export const FIREWALL_RULE_NAME = 'Camera Link (local sender)';
 const PROFILE_RECHECK_MS = 15_000;
 const LINK_DOWN_RECHECK_MS = 5_000;
-/** Reads network profiles, whether our firewall rule exists, and whether each USB gateway answers ARP. */
+/** Reads network profiles, adapter descriptions, whether our firewall rule exists, and whether each iOS USB gateway answers ARP. */
 function profileQuery(gateways: string[]): string {
   const list = gateways.filter((ip) => /^[\d.]+$/.test(ip)).map((ip) => `'${ip}'`).join(',');
   return [
     '$p = @(Get-NetConnectionProfile | ForEach-Object { @{ alias = $_.InterfaceAlias; category = [string]$_.NetworkCategory } });',
+    '$a = @(Get-NetAdapter | ForEach-Object { @{ alias = $_.Name; desc = [string]$_.InterfaceDescription } });',
     `$r = @(Get-NetFirewallRule -DisplayName '${FIREWALL_RULE_NAME}' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count -gt 0;`,
     // A ping forces an ARP resolution; the neighbor state then tells whether the iPhone is really there.
     `$n = @(foreach ($ip in @(${list})) { ping -n 1 -w 800 $ip | Out-Null; @{ ip = $ip; state = [string](Get-NetNeighbor -IPAddress $ip -ErrorAction SilentlyContinue | Select-Object -First 1).State } });`,
-    '@{ profiles = $p; rule = $r; neighbors = $n } | ConvertTo-Json -Compress -Depth 3',
+    '@{ profiles = $p; adapters = $a; rule = $r; neighbors = $n } | ConvertTo-Json -Compress -Depth 3',
   ].join(' ');
 }
 
@@ -102,6 +104,7 @@ export class NetworkScanner extends EventEmitter {
   private current: NetworkSnapshot = { usb: [], wifi: [], updatedAt: Date.now() };
   private timer?: NodeJS.Timeout;
   private profiles = new Map<string, string>();
+  private descriptions = new Map<string, string>();
   private hasFirewallRule = false;
   private profileCheckedAt = 0;
   private checkingProfiles = false;
@@ -153,7 +156,8 @@ export class NetworkScanner extends EventEmitter {
     for (const [name, addresses] of Object.entries(os.networkInterfaces())) {
       for (const info of addresses ?? []) {
         if (!isInet4(info.family) || info.internal || !info.address) continue;
-        const isUsbName = USB_PATTERN.test(name);
+        const desc = this.descriptions.get(name) || '';
+        const isUsbName = USB_PATTERN.test(name) || USB_DESC_PATTERN.test(desc);
         const isHotspotAddress = HOTSPOT_IP_PATTERN.test(info.address);
         const isUsb = isUsbName || (isHotspotAddress && !WIFI_NAME_PATTERN.test(name));
         const isUsbLinkLocal = isUsbName && /^169\.254\./.test(info.address);
@@ -172,7 +176,7 @@ export class NetworkScanner extends EventEmitter {
         };
         const category = this.profiles.get(name);
         if (category) endpoint.networkCategory = category;
-        if (transport === 'USB' && this.unreachableGateways.has(gatewayFor(info.address, info.netmask))) endpoint.linkDown = true;
+        if (transport === 'USB' && isHotspotAddress && this.unreachableGateways.has(gatewayFor(info.address, info.netmask))) endpoint.linkDown = true;
         if (category === 'Public' && !this.hasFirewallRule) {
           endpoint.firewallFix = `New-NetFirewallRule -DisplayName '${FIREWALL_RULE_NAME}' -Direction Inbound -Action Allow `
             + `-Protocol TCP -LocalPort ${this.port} -RemoteAddress ${subnetCidr(info.address, info.netmask)} -Profile Public`;
@@ -202,7 +206,7 @@ export class NetworkScanner extends EventEmitter {
     const interval = this.unreachableGateways.size ? LINK_DOWN_RECHECK_MS : PROFILE_RECHECK_MS;
     if (!force && Date.now() - this.profileCheckedAt < interval) return;
     this.checkingProfiles = true;
-    const gateways = usb.filter((endpoint) => !/^169\.254\./.test(endpoint.address))
+    const gateways = usb.filter((endpoint) => HOTSPOT_IP_PATTERN.test(endpoint.address))
       .map((endpoint) => gatewayFor(endpoint.address, endpoint.netmask));
     execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', profileQuery(gateways)], { timeout: 10_000, windowsHide: true }, (error, stdout) => {
       this.checkingProfiles = false;
@@ -213,17 +217,21 @@ export class NetworkScanner extends EventEmitter {
         const asList = <T>(value: Entry<T>): T[] => (Array.isArray(value) ? value : value ? [value] : []);
         const result = JSON.parse(stdout) as {
           profiles?: Entry<{ alias: string; category: string }>;
+          adapters?: Entry<{ alias: string; desc: string }>;
           rule?: boolean;
           neighbors?: Entry<{ ip: string; state: string }>;
         };
         const next = new Map(asList(result.profiles).map((entry) => [entry.alias, entry.category]));
+        const nextDescriptions = new Map(asList(result.adapters).map((entry) => [entry.alias, entry.desc]));
         const unreachable = new Set(asList(result.neighbors)
           .filter((entry) => entry.state === 'Incomplete' || entry.state === 'Unreachable' || !entry.state)
           .map((entry) => entry.ip));
         const changed = JSON.stringify([...next]) !== JSON.stringify([...this.profiles])
+          || JSON.stringify([...nextDescriptions]) !== JSON.stringify([...this.descriptions])
           || Boolean(result.rule) !== this.hasFirewallRule
           || [...unreachable].sort().join() !== [...this.unreachableGateways].sort().join();
         this.profiles = next;
+        this.descriptions = nextDescriptions;
         this.hasFirewallRule = Boolean(result.rule);
         this.unreachableGateways = unreachable;
         if (changed) this.scan();
