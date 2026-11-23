@@ -19,7 +19,7 @@ import {
 import { paintRanges, stepsBar, watchRanges } from '../amstech-ui';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
-type NetworkEndpoint = { name: string; address: string; url: string; networkCategory?: string; firewallFix?: string; linkDown?: boolean };
+type NetworkEndpoint = { name: string; address: string; transport?: 'USB' | 'Wi-Fi'; url: string; networkCategory?: string; firewallFix?: string; linkDown?: boolean };
 type NetworkSnapshot = { usb: NetworkEndpoint[]; wifi: NetworkEndpoint[]; updatedAt: number };
 type SenderSettings = {
   orientation: 'landscape' | 'portrait';
@@ -337,7 +337,7 @@ function applySenderState(message: ControlMessage): void {
   const settings = message.settings as SenderSettings | undefined;
   if (!settings) return;
   const lenses = (message.lenses || []) as Lens[];
-  const lensKey = lenses.map((lens) => lens.deviceId).join('|');
+  const lensKey = lenses.map((lens) => `${lens.deviceId}:${lens.label}`).join('|');
   const lensSelect = $<HTMLSelectElement>('remote-lens');
   if (lensKey !== latestLensesKey) {
     latestLensesKey = lensKey;
@@ -595,9 +595,13 @@ function enableBackdropClose(dialog: HTMLDialogElement): void {
 }
 enableBackdropClose($<HTMLDialogElement>('settings-modal'));
 enableBackdropClose($<HTMLDialogElement>('connection-modal'));
+enableBackdropClose($<HTMLDialogElement>('about-modal'));
 const openSettings = () => $<HTMLDialogElement>('settings-modal').showModal();
+const openAbout = () => $<HTMLDialogElement>('about-modal').showModal();
 $('open-settings').addEventListener('click', openSettings);
 $('header-settings').addEventListener('click', openSettings);
+$('header-about').addEventListener('click', openAbout);
+$('footer-about').addEventListener('click', openAbout);
 const bitrateInput = $<HTMLInputElement>('remote-bitrate');
 bitrateInput.addEventListener('pointerdown', () => { draggingBitrate = true; });
 bitrateInput.addEventListener('input', () => {
@@ -717,7 +721,7 @@ async function renderNetwork(network: NetworkSnapshot): Promise<void> {
   // USB first: a pill says whether the cable is seen, and the chapter bar marks the step you are on
   const usbFound = network.usb.length > 0;
   setStatePill('usb-state', usbFound, usbFound ? 'Detected' : 'Not detected');
-  setStatePill('wifi-state', network.wifi.length > 0, network.wifi[0]?.name || 'No network');
+  setStatePill('wifi-state', network.wifi.length > 0, network.wifi.length > 0 ? 'Ready' : 'No network');
   $('usb-steps').innerHTML = stepsBar(['Cable', 'Hotspot', 'Scan', 'Trust'], usbFound ? 2 : 0);
   await Promise.all([
     renderEndpoints('usb-endpoints', network.usb, 'No Apple USB interface detected. Connect the cable and enable Personal Hotspot.', generation),
@@ -754,7 +758,8 @@ async function renderEndpoints(id: string, endpoints: NetworkEndpoint[], empty: 
     const code = document.createElement('code');
     code.textContent = url;
     const interfaceName = document.createElement('small');
-    interfaceName.textContent = endpoint.name;
+    const isLan = id === 'wifi-endpoints' || endpoint.transport === 'Wi-Fi';
+    interfaceName.textContent = isLan ? `PC network: ${endpoint.name}` : endpoint.name;
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.className = 'copy-button secondary-button small-button with-icon ico-copy';

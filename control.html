@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#ffffff" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-2 -2 52 52'%3E%3Cpath d='M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z' fill='%232B36D9' stroke='%231E1B2E' stroke-width='2.6' stroke-linejoin='round'/%3E%3Cpath d='M13 25l6 5-6 5M24 36h10' fill='none' stroke='%23fff' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Camera Link · Studio</title>
     <link rel="stylesheet" href="/src/control.css" />
   </head>
@@ -12,13 +12,14 @@
     <div class="studio-shell">
       <header class="studio-header">
         <h1 class="visually-hidden">Camera Link Studio</h1>
-        <a class="studio-brand logo" href="/control" translate="no"><svg class="thor" width="36" height="36" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>camera link <span>studio</span></a>
+        <a class="studio-brand logo" href="/control" translate="no"><svg class="thor" width="36" height="36" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>camera link <span>amstech</span></a>
         <svg class="sticker header-sticker" width="40" height="40" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
         <div class="header-actions">
           <span id="connection-status" class="status-chip pill" role="status"><i aria-hidden="true"></i><span>Waiting for iPhone…</span></span>
           <button id="show-connection" type="button" class="secondary-button with-icon ico-plug">Connect iPhone</button>
           <button id="header-settings" type="button" class="secondary-button with-icon ico-sliders" aria-haspopup="dialog">Settings</button>
           <button id="open-obs" type="button" class="secondary-button yellow-button with-icon ico-obs">OBS source</button>
+          <button id="header-about" type="button" class="secondary-button icon-button with-icon ico-info" aria-haspopup="dialog" aria-label="About Camera Link" title="About"></button>
         </div>
       </header>
 
@@ -141,7 +142,7 @@
             </div>
           </section>
 
-          <footer class="panel-footer">WebCodecs · binary WebSocket · hardware decode<span id="encoder-mode">Encoder idle</span><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · MIT</span></footer>
+          <footer class="panel-footer">WebCodecs · binary WebSocket · hardware decode<span id="encoder-mode">Encoder idle</span><div class="footer-brand"><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · MIT</span><button id="footer-about" type="button" class="text-link" aria-haspopup="dialog">About</button></div></footer>
         </aside>
       </main>
     </div>
@@ -220,12 +221,40 @@
             <div id="usb-endpoints" class="endpoint-list"></div>
           </section>
           <section class="endpoint-card">
-            <div class="endpoint-heading"><div><span>Alternative</span><h3 class="with-icon ico-wifi">Wi-Fi LAN</h3></div><span id="wifi-state" class="pill"><span class="dot" aria-hidden="true"></span><span>No network</span></span></div>
+            <div class="endpoint-heading"><div><span>Alternative</span><h3 class="with-icon ico-wifi">Wi-Fi / LAN</h3></div><span id="wifi-state" class="pill"><span class="dot" aria-hidden="true"></span><span>No network</span></span></div>
             <p>Connect your iPhone and PC to the same router or local network.</p>
             <div id="wifi-endpoints" class="endpoint-list"></div>
           </section>
         </div>
         <footer><span>Endpoints refresh automatically every 3 seconds.</span><a href="/sender" target="_blank" rel="noopener noreferrer">Open sender on this device ↗</a></footer>
+      </form>
+    </dialog>
+
+    <dialog id="about-modal" class="about-dialog" aria-labelledby="about-title">
+      <form method="dialog" class="modal-card">
+        <header>
+          <svg class="sticker" width="48" height="48" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
+          <div><span class="eyebrow">An AMSTech project</span><h2 id="about-title">iPhone Camera Link</h2><p>Low-latency local studio camera for PC and OBS — no app, no cloud, no account.</p></div>
+          <button class="close-modal with-icon ico-x" value="close" aria-label="Close"></button>
+        </header>
+        <section class="about-brand-card">
+          <svg class="about-seal" width="96" height="96" viewBox="0 0 200 200" aria-hidden="true"><defs><path id="about-seal-ring" d="M100 100m-68 0a68 68 0 1 1 136 0a68 68 0 1 1 -136 0"/></defs><circle cx="100" cy="100" r="96" fill="#FFE27A" stroke="#1E1B2E" stroke-width="5"/><circle cx="100" cy="100" r="52" fill="none" stroke="#1E1B2E" stroke-width="2.5" stroke-dasharray="2 6" stroke-linecap="round"/><text font-family="Bricolage Grotesque, Figtree, Arial Black, sans-serif" font-weight="800" font-size="17" fill="#1E1B2E"><textPath href="#about-seal-ring" textLength="421" lengthAdjust="spacing">BUILT FOR ME · SHARED WITH ALL ·</textPath></text><g transform="translate(67 66) scale(1.38)"><path d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z" fill="#2B36D9" stroke="#1E1B2E" stroke-width="2.6" stroke-linejoin="round"/><path d="M13 25l6 5-6 5M24 36h10" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+          <div class="about-copy">
+            <strong>Built for me, shared with all.</strong>
+            <p>Streams your iPhone camera straight to your PC and OBS over USB or Wi-Fi/LAN using WebCodecs and binary WebSockets. Everything stays on your local network.</p>
+            <div class="about-links">
+              <a class="secondary-button small-button" href="https://amstech.dev" target="_blank" rel="noopener noreferrer">amstech.dev ↗</a>
+              <a class="secondary-button small-button" href="/diag" target="_blank" rel="noopener noreferrer">Camera diagnostics ↗</a>
+            </div>
+          </div>
+        </section>
+        <dl class="cajetin about-specs">
+          <div><dt>Version</dt><dd>v1.0.0</dd></div>
+          <div><dt>License</dt><dd>MIT · Open source</dd></div>
+          <div><dt>Pipeline</dt><dd>WebCodecs · WebSocket</dd></div>
+          <div><dt>Privacy</dt><dd>Local network only</dd></div>
+        </dl>
+        <footer><span>Shortcut: <kbd>K</kbd> forces a keyframe · Click preview to focus</span><span>© AMSTech</span></footer>
       </form>
     </dialog>
     <div id="studio-toast" role="status" aria-live="polite"></div>
