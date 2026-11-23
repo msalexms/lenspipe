@@ -10,10 +10,12 @@ import {
   type ControlMessage,
 } from '../protocol';
 import { BinarySocket } from '../socket';
+import { paintRange, watchRanges } from '../amstech-ui';
 import {
   CODEC_H264,
   CODEC_HEVC,
   DEFAULT_SETTINGS,
+  MIN_BITRATE,
   PHOTO_MODE_WARNING,
   PRESETS,
   PROFILES,
@@ -22,7 +24,7 @@ import {
   formatTrackMode,
   aspectLabel,
   encodeRotation,
-  h264Codec,
+  h264Codecs,
   hevcCodecs,
   limitCrop,
   matchingProfile,
@@ -33,6 +35,7 @@ import {
   rotatePoint,
   sanitizeSettings,
   sensorRotation,
+  uprightEncodeRotation,
   type BitrateMode,
   type LatencyMode,
   type Orientation,
@@ -44,15 +47,17 @@ import { HealthBanner, HealthMonitor } from '../health';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
-/** Turns getUserMedia(audio) failures into something actionable on an iPhone. */
+/** Turns getUserMedia(audio) failures into something actionable on mobile browsers. */
 function microphoneErrorMessage(error: unknown): string {
   const name = error instanceof DOMException ? error.name : '';
   if (name === 'NotAllowedError' || name === 'SecurityError') {
-    return 'Microphone blocked for this site. On the iPhone: Settings → Apps → Safari → Microphone → Ask/Allow, '
-      + 'or in Safari tap aA → Website Settings → Microphone → Allow, then reload this page.';
+    return IS_IOS
+      ? 'Microphone blocked for this site. On iPhone: Settings → Apps → Safari → Microphone → Ask/Allow, '
+        + 'or in Safari tap aA → Website Settings → Microphone → Allow, then reload this page.'
+      : 'Microphone blocked for this site. Tap the lock or site-settings icon in the address bar → Permissions → Microphone → Allow, then reload this page.';
   }
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No microphone found for the selected source; choose Default microphone.';
-  if (name === 'NotReadableError' || name === 'AbortError') return 'The microphone is busy (a call, Siri or another app). End it and try again.';
+  if (name === 'NotReadableError' || name === 'AbortError') return 'The microphone is busy (a call, voice assistant or another app). End it and try again.';
   return `Microphone failed: ${error instanceof Error ? error.message : String(error)}`;
 }
 
@@ -79,6 +84,7 @@ const DEVICE_ROTATION = {
 /** The DEVICE_ROTATION table describes WebKit on iOS only; elsewhere camera frames arrive upright. */
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_MOBILE = IS_IOS || /Android|Mobile/i.test(navigator.userAgent);
 
 function interfaceOrientation(): number {
   const legacy = (window as Window & { orientation?: number }).orientation;
@@ -87,7 +93,8 @@ function interfaceOrientation(): number {
   return angle === 270 ? -90 : angle;
 }
 const MIN_FORCED_KEYFRAME_GAP_MS = 250;
-const PREFERENCES_KEY = 'camera-link:stream-settings';
+const PREFERENCES_KEY = 'lenspipe:stream-settings';
+const LEGACY_PREFERENCES_KEY = 'camera-link:stream-settings';
 
 interface EncoderCandidate {
   config: VideoEncoderConfig & Record<string, unknown>;
@@ -99,7 +106,8 @@ interface EncoderCandidate {
 
 function loadPreferences(): Partial<StreamSettings> {
   try {
-    return sanitizeSettings(JSON.parse(localStorage.getItem(PREFERENCES_KEY) || '{}'));
+    const stored = localStorage.getItem(PREFERENCES_KEY) ?? localStorage.getItem(LEGACY_PREFERENCES_KEY);
+    return sanitizeSettings(JSON.parse(stored || '{}'));
   } catch {
     return {};
   }
@@ -127,6 +135,7 @@ class CameraSender {
   private encoderCandidates: EncoderCandidate[] = [];
   private encoderCandidateIndex = 0;
   private encoderProducedOutput = false;
+  private encoderFallbackTried = false;
   private encoderWidth = 0;
   private encoderHeight = 0;
   private forceNextKeyframe = true;
@@ -154,6 +163,7 @@ class CameraSender {
   /** What the user asked for; survives camera reopens (lens/preset changes) and is re-applied after them. */
   private torchWanted = false;
   private sizeMismatchFrames = 0;
+  private pendingResizeVerify = false;
   private turned = false;
   /** The buffer rectangle sent for the current frame when the encoder limit crops it (null = whole frame). */
   private frameCrop: CropRect | null = null;
@@ -240,7 +250,7 @@ class CameraSender {
       if ((event as CustomEvent<string>).detail === 'offline') $('transport').textContent = 'OFFLINE';
     });
     this.socket.addEventListener('pairing-required', () => {
-      const message = 'This iPhone is not paired. Scan the QR code shown in the PC studio (Connect iPhone) again.';
+      const message = 'This phone is not paired. Scan the QR code shown in the PC studio (Connect phone) again.';
       $('transport').textContent = 'NOT PAIRED';
       const note = $('start-note');
       note.textContent = message;
@@ -380,7 +390,7 @@ class CameraSender {
       const preset = (event.currentTarget as HTMLSelectElement).value as PresetName;
       this.enqueue(async () => {
         await this.applySettings({ preset });
-        if (PRESETS[this.preset].photoMode) this.toast('4:3 photo mode: less of the iPhone video processing. See the note in Settings.', 4500);
+        if (PRESETS[this.preset].photoMode) this.toast('4:3 photo mode: less phone video processing. See the note in Settings.', 4500);
       });
     });
     $<HTMLSelectElement>('codec').addEventListener('change', (event) => {
@@ -409,8 +419,8 @@ class CameraSender {
     button.textContent = 'Requesting access…';
     note.classList.remove('error');
     try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access requires HTTPS in Safari. Open the https:// link from the PC studio.');
-      if (!('VideoEncoder' in window) || !('VideoFrame' in window)) throw new Error('WebCodecs VideoEncoder requires iOS Safari 16.4 or newer.');
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access requires HTTPS. Open the https:// link from the PC studio.');
+      if (!('VideoEncoder' in window) || !('VideoFrame' in window)) throw new Error('WebCodecs VideoEncoder is not supported by this browser. Use iOS Safari 16.4+ or Android Chrome / Edge.');
       this.started = true;
       await Promise.race([
         this.socket.waitUntilOpen(),
@@ -447,14 +457,22 @@ class CameraSender {
     return { width: preset.width, height: preset.height, frameRate: preset.frameRate };
   }
 
+  private matchesDesiredSize(width?: number, height?: number): boolean {
+    const desired = this.desiredDimensions();
+    return (width === desired.width && height === desired.height)
+      || (width === desired.height && height === desired.width);
+  }
+
   /**
    * Warns, here and in the studio, when the phone is held so that the picture comes out on its side (held
    * across the chosen aspect) or upside down. Only iOS reports how the phone is held. The state must stay
    * the same for 0.6 s, so turning the phone does not flash the warning.
    */
-  private watchHold(display: number): void {
-    if (!IS_IOS) return;
-    const next = holdState(sensorRotation(this.orientation, this.turned, this.trackFacing, true), display);
+  private watchHold(display: number, rotation: number): void {
+    if (!IS_MOBILE) return;
+    const next = IS_IOS
+      ? holdState(sensorRotation(this.orientation, this.turned, this.trackFacing, true), display)
+      : holdState(quarterTurns(rotation - (this.turned ? 180 : 0)), display);
     if (next === this.hold) {
       window.clearTimeout(this.holdTimer);
       this.holdTimer = undefined;
@@ -483,10 +501,10 @@ class CameraSender {
     const aspect = landscape ? ratio : flipped;
     if (this.hold === 'upside-down') {
       $('hold-title').textContent = 'The picture is upside down';
-      $('hold-detail').textContent = 'Turn the iPhone round, or rotate the picture.';
+      $('hold-detail').textContent = 'Turn the phone round, or rotate the picture.';
       $('hold-action').textContent = 'Rotate 180°';
     } else {
-      $('hold-title').textContent = landscape ? 'Turn the iPhone sideways' : 'Turn the iPhone upright';
+      $('hold-title').textContent = landscape ? 'Turn the phone sideways' : 'Turn the phone upright';
       $('hold-detail').textContent = `The stream is ${aspect}, so the picture comes out on its side. If the phone is already ${landscape ? 'sideways' : 'upright'}, turn off Rotation Lock.`;
       $('hold-action').textContent = `Use ${landscape ? flipped : ratio}`;
     }
@@ -514,6 +532,8 @@ class CameraSender {
   private async openCamera(deviceId = this.selectedLens): Promise<void> {
     const generation = ++this.captureGeneration;
     this.stopVideoExtraction();
+    this.pendingResizeVerify = false;
+    this.sizeMismatchFrames = 0;
     this.videoStream?.getTracks().forEach((track) => track.stop());
     this.track = undefined;
     // The LED goes off with the old capture session; `torchWanted` is re-applied once the new track is live.
@@ -657,9 +677,9 @@ class CameraSender {
         || (currentLens !== undefined && this.lensLabel(currentLens, activeIndex) === '1×');
       const reportedMax = this.track.getCapabilities?.().frameRate?.max || maxCap;
       if (onPhysicalWide) {
-        this.toast(`Safari capped ${this.track.label || '1×'} at ${Math.round(actualFps || 30)} FPS (Safari max: ${Math.round(reportedMax)} FPS; check Low Power Mode or lighting)`);
+        this.toast(`This browser capped ${this.track.label || '1×'} at ${Math.round(actualFps || 30)} FPS (max: ${Math.round(reportedMax)} FPS; check battery saver or lighting)`);
       } else {
-        this.toast('This lens is capped at 30 FPS on iOS; switch to 1× for 60 FPS');
+        this.toast('This lens is capped at 30 FPS on this phone; switch to 1× for 60 FPS');
       }
     }
     if (this.preview.readyState < 1) {
@@ -725,6 +745,36 @@ class CameraSender {
     }
   }
 
+  private stopWorkerCapture(): Promise<void> {
+    window.clearTimeout(this.captureWatchdog);
+    const worker = this.captureWorker;
+    this.captureWorker = undefined;
+    if (!worker) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        worker.onmessage = null;
+        worker.onerror = null;
+        worker.terminate();
+        resolve();
+      };
+      const timer = window.setTimeout(finish, 250);
+      worker.onmessage = (event: MessageEvent<{ type: string; frame?: VideoFrame }>) => {
+        if (event.data?.frame) event.data.frame.close();
+        if (event.data?.type === 'stopped' || event.data?.type === 'ended' || event.data?.type === 'error') finish();
+      };
+      worker.onerror = () => finish();
+      try {
+        worker.postMessage({ type: 'stop' });
+      } catch {
+        finish();
+      }
+    });
+  }
+
   /**
    * Frame source preference: MediaStreamTrackProcessor on the main thread (Chromium), then inside a
    * Worker (iOS Safari only exposes it there), then copying from the <video> element as a last resort.
@@ -743,9 +793,9 @@ class CameraSender {
     }
   }
 
-  private startWorkerCapture(track: MediaStreamTrack, generation: number): void {
+  private startWorkerCapture(track: MediaStreamTrack, generation: number, existingClone?: MediaStreamTrack): void {
     let worker: Worker | undefined;
-    let clone: MediaStreamTrack | undefined;
+    let clone: MediaStreamTrack | undefined = existingClone;
     const fallback = (reason: unknown, permanent: boolean) => {
       if (!worker || this.captureWorker !== worker) return;
       console.info('Worker frame capture unavailable; using <video> frames', reason);
@@ -756,7 +806,7 @@ class CameraSender {
     try {
       worker = new Worker(new URL('./capture-worker.ts', import.meta.url), { type: 'module' });
       // Transfer a clone so the original keeps feeding the on-screen preview.
-      clone = track.clone();
+      clone ??= track.clone();
       this.captureWorker = worker;
       this.captureSource = 'worker';
       worker.postMessage({ type: 'start', track: clone }, [clone as unknown as Transferable]);
@@ -849,15 +899,31 @@ class CameraSender {
       }
       if (frameWidth && frameHeight && (frameWidth !== this.encoderWidth || frameHeight !== this.encoderHeight)) {
         // Frames already in flight at the old size arrive right after an in-place resize: skip a couple
-        // before concluding the camera really changed size and rebuilding the encoder.
-        if (++this.sizeMismatchFrames < 3) return;
+        // before concluding the camera really changed size and rebuilding the encoder (or reopening).
+        const threshold = this.pendingResizeVerify ? 5 : 3;
+        if (++this.sizeMismatchFrames < threshold) return;
         this.sizeMismatchFrames = 0;
+        if (this.pendingResizeVerify) {
+          this.pendingResizeVerify = false;
+          if (!this.matchesDesiredSize(frameWidth, frameHeight)) {
+            this.reconfigurePending = true;
+            this.enqueue(async () => {
+              try {
+                await this.restartCamera();
+              } finally {
+                this.reconfigurePending = false;
+              }
+            });
+            return;
+          }
+        }
         this.encoderWidth = frameWidth;
         this.encoderHeight = frameHeight;
         this.rebuildEncoder(frameWidth, frameHeight);
         return;
       }
       this.sizeMismatchFrames = 0;
+      this.pendingResizeVerify = false;
       // Backlog = data the server hasn't confirmed yet (end-to-end), not just Safari's local buffer.
       // Keeping it to ~250 ms of video bounds the latency: if the link is slower than the bitrate,
       // frames are skipped (lower fps) instead of piling up as ever-growing lag.
@@ -945,8 +1011,8 @@ class CameraSender {
     const visible = frame.visibleRect
       ? { x: frame.visibleRect.x, y: frame.visibleRect.y, width: frame.visibleRect.width, height: frame.visibleRect.height }
       : { x: 0, y: 0, width: frame.codedWidth, height: frame.codedHeight };
-    this.watchHold(display);
-    const { rotation, crop } = this.geometry(visible, bufferRotation);
+    const { rotation, crop } = this.geometry(visible, bufferRotation, display);
+    this.watchHold(display, rotation);
     this.setFrameCrop(crop, visible, rotation);
     this.setDisplayRotation(display, quarterTurns(rotation + bufferRotation - display));
     const source = fromFrame ? 'frame' : this.captureSource === 'video' || !IS_IOS ? 'video' : 'device';
@@ -957,9 +1023,10 @@ class CameraSender {
    * Rotation to send (fixed by the chosen aspect and the 180° turn, never by how the phone is held) and the
    * buffer rectangle to encode (the whole frame, unless the encoder refused that size).
    */
-  private geometry(visible: CropRect, bufferRotation: number): { rotation: number; crop: CropRect | null } {
-    const target = sensorRotation(this.orientation, this.turned, this.trackFacing, IS_IOS);
-    const rotation = encodeRotation(target, bufferRotation, visible.width, visible.height, this.orientation);
+  private geometry(visible: CropRect, bufferRotation: number, display = 0): { rotation: number; crop: CropRect | null } {
+    const rotation = IS_IOS
+      ? encodeRotation(sensorRotation(this.orientation, this.turned, this.trackFacing, true), bufferRotation, visible.width, visible.height, this.orientation)
+      : uprightEncodeRotation(visible.width, visible.height, display, this.orientation, this.turned);
     return { rotation, crop: this.encodeLimit ? limitCrop(visible, null, this.encodeLimit) : null };
   }
 
@@ -973,17 +1040,17 @@ class CameraSender {
       : { x: 0, y: 0, width, height };
     const display = IS_IOS ? ((DEVICE_ROTATION[this.trackFacing] as Record<string, number>)[String(interfaceOrientation())] ?? 0) : 0;
     const bufferRotation = this.captureSource === 'video' && IS_IOS ? display : 0;
-    const { crop } = this.geometry(visible, bufferRotation);
+    const { crop } = this.geometry(visible, bufferRotation, display);
     return crop ? { width: crop.width, height: crop.height } : { width: visible.width, height: visible.height };
   }
 
   /** Largest size (same aspect, steps of 4 %) the encoder accepts, when the full size is refused. */
-  private async findEncodableSize(width: number, height: number, frameRate: number): Promise<{ width: number; height: number } | null> {
+  private async findEncodableSize(width: number, height: number, frameRate: number, bitrate = this.bitrate): Promise<{ width: number; height: number } | null> {
     if (!VideoEncoder.isConfigSupported) return null;
     for (let scale = 0.96; scale >= 0.3; scale *= 0.96) {
       const w = Math.floor((width * scale) / 16) * 16;
       const h = Math.floor((height * scale) / 16) * 16;
-      for (const candidate of this.buildEncoderCandidates(w, h, frameRate, this.bitrate)) {
+      for (const candidate of this.buildEncoderCandidates(w, h, frameRate, bitrate)) {
         try {
           if ((await VideoEncoder.isConfigSupported(candidate.config)).supported) return { width: w, height: h };
         } catch {
@@ -1064,8 +1131,8 @@ class CameraSender {
 
   /** Full codec strings to try for a base codec, best first. */
   private codecVariants(codecBase: string, width: number, height: number, frameRate: number, bitrate: number): string[] {
-    // The lowest level that fits the size, frame rate and bitrate (12 MP 4:3 frames need level 6.0).
-    if (codecBase === CODEC_H264) return [h264Codec(width, height, frameRate, bitrate)];
+    // High profile first, then Main and Constrained Baseline for hardware encoders that reject High (12 MP uses level 6.0).
+    if (codecBase === CODEC_H264) return h264Codecs(width, height, frameRate, bitrate);
     // HEVC High tier for high bitrates; Main tier stays as the last resort for encoders that reject it.
     if (codecBase === CODEC_HEVC) return hevcCodecs(width, height, bitrate);
     return [codecBase];
@@ -1122,6 +1189,8 @@ class CameraSender {
   private async configureEncoder(overrideWidth?: number, overrideHeight?: number): Promise<void> {
     if (!this.track || !this.started) return;
     const generation = ++this.encoderGeneration;
+    this.encoderFallbackTried = false;
+    this.sizeMismatchFrames = 0;
     const preset = this.desiredDimensions();
     const settings = this.track.getSettings();
     // Encode the size that will actually be sent, in sensor orientation (iOS reports the capture size the way
@@ -1138,17 +1207,50 @@ class CameraSender {
       await this.startEncoderFrom(0, generation);
     } catch (error) {
       if (generation !== this.encoderGeneration) return;
-      // Too large for this iPhone's encoder (e.g. a 12 MP frame): find the largest size it accepts and crop
-      // frames to it, instead of refusing to start.
-      const fit = await this.findEncodableSize(size.width, size.height, frameRate);
-      if (!fit || generation !== this.encoderGeneration) throw error;
-      this.encodeLimit = { long: Math.max(fit.width, fit.height), short: Math.min(fit.width, fit.height) };
-      this.encoderWidth = fit.width;
-      this.encoderHeight = fit.height;
-      this.encoderCandidates = this.buildEncoderCandidates(fit.width, fit.height, frameRate, this.bitrate);
-      await this.startEncoderFrom(0, generation);
-      this.toast(`This iPhone encodes up to ${Math.max(fit.width, fit.height)}×${Math.min(fit.width, fit.height)} for this format; the picture is cropped to fit`, 5000);
+      if (!(await this.configureEncoderFallback(size.width, size.height, frameRate, generation))) throw error;
     }
+  }
+
+  /** Step down bitrate at full resolution first, then crop to the largest frame size the hardware encoder accepts. */
+  private async configureEncoderFallback(width: number, height: number, frameRate: number, generation: number): Promise<boolean> {
+    if (this.encoderFallbackTried || generation !== this.encoderGeneration) return false;
+    this.encoderFallbackTried = true;
+    for (const bitrate of [40_000_000, 20_000_000, MIN_BITRATE].filter((b) => b < this.bitrate)) {
+      if (generation !== this.encoderGeneration) return false;
+      this.encoderCandidates = this.buildEncoderCandidates(width, height, frameRate, bitrate);
+      try {
+        await this.startEncoderFrom(0, generation);
+        if (generation !== this.encoderGeneration) return false;
+        this.bitrate = bitrate;
+        this.savePreferences();
+        this.syncUi();
+        this.sendState();
+        this.toast(`This phone encodes up to ${Math.round(bitrate / 1_000_000)} Mbps for this format`, 5000);
+        return true;
+      } catch {
+        // Try the next lower bitrate.
+      }
+    }
+    let fitBitrate = this.bitrate;
+    let fit = await this.findEncodableSize(width, height, frameRate, fitBitrate);
+    if (!fit && this.bitrate > MIN_BITRATE) {
+      fitBitrate = MIN_BITRATE;
+      fit = await this.findEncodableSize(width, height, frameRate, fitBitrate);
+    }
+    if (!fit || generation !== this.encoderGeneration) return false;
+    this.encodeLimit = { long: Math.max(fit.width, fit.height), short: Math.min(fit.width, fit.height) };
+    this.encoderWidth = fit.width;
+    this.encoderHeight = fit.height;
+    if (fitBitrate !== this.bitrate) {
+      this.bitrate = fitBitrate;
+      this.savePreferences();
+    }
+    this.encoderCandidates = this.buildEncoderCandidates(fit.width, fit.height, frameRate, this.bitrate);
+    await this.startEncoderFrom(0, generation);
+    this.syncUi();
+    this.sendState();
+    this.toast(`This phone encodes up to ${Math.max(fit.width, fit.height)}×${Math.min(fit.width, fit.height)} for this format; the picture is cropped to fit`, 5000);
+    return true;
   }
 
   /** Starts the first usable candidate at or after `start` (also used when the hardware rejects one later). */
@@ -1231,14 +1333,20 @@ class CameraSender {
         console.error('Video encoder error', error);
         this.forceNextKeyframe = true;
         if (!this.encoderProducedOutput) {
-          // isConfigSupported accepted it but the hardware did not: move on to the next candidate.
+          // isConfigSupported accepted it but the hardware did not: move on to the next candidate or fallback.
           const next = this.encoderCandidateIndex + 1;
-          this.enqueue(() => this.startEncoderFrom(next, generation));
+          this.enqueue(async () => {
+            if (next < this.encoderCandidates.length) {
+              await this.startEncoderFrom(next, generation);
+            } else if (!(await this.configureEncoderFallback(this.encoderWidth, this.encoderHeight, this.encoderFrameRate, generation))) {
+              this.toast('Encoder failed on this device. Try H.264 or a lower format/bitrate in Settings.', 6000);
+            }
+          });
           return;
         }
         this.encoderErrorCount++;
         if (this.encoderErrorCount > 2) {
-          this.toast('Encoder stopped after repeated errors');
+          this.toast('Encoder stopped after repeated errors. Try H.264 or a lower format in Settings, or reload the page.', 6000);
           return;
         }
         this.toast('Encoder restarted after an error');
@@ -1274,6 +1382,7 @@ class CameraSender {
     const label = device.label || `Camera ${index + 1}`;
     if (/ultra|0[.,]5/i.test(label)) return '0.5×';
     if (/tele|periscop/i.test(label)) return 'Tele';
+    if (/macro/i.test(label)) return 'Macro';
     if (/front|face|frontal|delantera/i.test(label)) return 'Front';
     if (this.isVirtualMultiLens(label)) return 'Auto';
     if (/wide|back|rear|trasera|gran angular|posterior/i.test(label)) return '1×';
@@ -1284,50 +1393,63 @@ class CameraSender {
     const counts = new Map<string, number>();
     return this.lenses.map((device, index) => {
       let label = this.lensLabel(device, index);
-      if (label === '1×' && counts.has('1×') && !counts.has('Auto')) {
+      if (IS_IOS && label === '1×' && counts.has('1×') && !counts.has('Auto')) {
         label = 'Auto';
       }
       const seen = (counts.get(label) || 0) + 1;
       counts.set(label, seen);
+      if (seen > 1 && !IS_IOS && label === '1×') return `Back ${seen}`;
       return seen === 1 ? label : `${label} (${seen})`;
     });
   }
 
   /**
-   * Lenses shown on the iPhone, ordered like the Camera app (0.5×, 1×, Tele, Auto, Front). iOS exposes up
-   * to three virtual multi-lens cameras (Dual, Dual Wide, Triple) that all switch lenses automatically;
-   * only the most capable one is shown as "Auto" (plus whichever is in use, so the selection stays visible).
+   * Lenses shown on the phone, ordered like the Camera app (0.5×, 1×, Back N, Tele, Macro, Auto, Front).
+   * iOS exposes up to three virtual multi-lens cameras (Dual, Dual Wide, Triple) that all switch lenses
+   * automatically; only the most capable one is shown as "Auto" (plus whichever is in use).
    */
   private visibleLenses(labels: string[]): number[] {
     const autoRank = (label: string) => (/triple/i.test(label) ? 0 : /dual wide|doble gran|dual-wide/i.test(label) ? 1 : 2);
     const autos = this.lenses.map((device, index) => ({ device, index }))
-      .filter(({ index }) => labels[index].startsWith('Auto'))
+      .filter(({ device, index }) => labels[index].startsWith('Auto') && (IS_IOS || this.isVirtualMultiLens(device.label)))
       .sort((a, b) => autoRank(a.device.label) - autoRank(b.device.label));
     const hidden = new Set(autos.slice(1).filter(({ device }) => device.deviceId !== this.selectedLens).map(({ index }) => index));
-    const order = (label: string) => ['0.5×', '1×', 'Tele', 'Auto', 'Front'].findIndex((name) => label.startsWith(name));
+    const orderList = ['0.5×', '1×', 'Back', 'Tele', 'Macro', 'Auto', 'Front'];
+    const order = (label: string) => {
+      const idx = orderList.findIndex((name) => label.startsWith(name));
+      return idx === -1 ? orderList.length : idx;
+    };
     return this.lenses.map((_, index) => index)
       .filter((index) => !hidden.has(index))
-      .sort((a, b) => ((order(labels[a]) + 6) % 6) - ((order(labels[b]) + 6) % 6) || a - b);
+      .sort((a, b) => order(labels[a]) - order(labels[b]) || a - b);
+  }
+
+  /** Lenses shown in the UI (iPhone and PC studio): deduplicated Auto and Camera-app order. */
+  private visibleLensEntries(): Array<{ deviceId: string; label: string; detail: string }> {
+    const labels = this.getLensLabels();
+    const visible = this.visibleLenses(labels);
+    const autoCount = visible.filter((index) => labels[index].startsWith('Auto')).length;
+    return visible.map((index) => {
+      const device = this.lenses[index];
+      // A single Auto entry needs no "(2)" suffix.
+      const label = autoCount === 1 && labels[index].startsWith('Auto') ? 'Auto' : labels[index];
+      return { deviceId: device.deviceId, label, detail: device.label || label };
+    });
   }
 
   private renderLenses(): void {
     const container = $('lens-buttons');
     container.replaceChildren();
-    const labels = this.getLensLabels();
-    const visible = this.visibleLenses(labels);
-    const autoCount = visible.filter((index) => labels[index].startsWith('Auto')).length;
-    for (const index of visible) {
-      const device = this.lenses[index];
+    for (const entry of this.visibleLensEntries()) {
       const button = document.createElement('button');
       button.type = 'button';
-      // A single Auto entry needs no "(2)" suffix.
-      button.textContent = autoCount === 1 && labels[index].startsWith('Auto') ? 'Auto' : labels[index];
-      button.title = device.label || button.textContent;
-      const active = device.deviceId === this.selectedLens;
+      button.textContent = entry.label;
+      button.title = entry.detail;
+      const active = entry.deviceId === this.selectedLens;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
       button.addEventListener('click', () => {
-        if (device.deviceId !== this.selectedLens) this.enqueue(() => this.switchCamera(device.deviceId));
+        if (entry.deviceId !== this.selectedLens) this.enqueue(() => this.switchCamera(entry.deviceId));
       });
       container.append(button);
     }
@@ -1355,6 +1477,7 @@ class CameraSender {
       zoomInput.step = String(zoom.step || 0.1);
       zoomInput.value = String((settings as MediaTrackSettings & { zoom?: number }).zoom || zoom.min);
       $('zoom-label').textContent = `${Number(zoomInput.value).toFixed(1)}×`;
+      paintRange(zoomInput);
     }
     $<HTMLButtonElement>('torch').disabled = !capabilities.torch;
     this.configureModeSelect('focus-mode', capabilities.focusMode, this.focusMode);
@@ -1423,7 +1546,7 @@ class CameraSender {
       }
     }
     if (!applied && !supportedModes?.length) {
-      this.toast('iOS Safari locks AF/AE in hardware; use EV slider to adjust exposure');
+      this.toast('This browser locks AF/AE in hardware; use the EV slider to adjust exposure');
     } else if (!applied) {
       const label = property === 'focusMode' ? 'Focus mode' : 'Exposure mode';
       this.toast(`${label} is not supported by this lens`);
@@ -1511,8 +1634,8 @@ class CameraSender {
 
   private toastFocusResult(result: string): void {
     if (result === 'locked') this.toast('Focus is locked. Set Focus to Continuous to tap-to-focus');
-    else if (result === 'unsupported' && !this.focusNoticeShown) this.toast('Safari does not expose focus control on this iPhone');
-    else if (result === 'refocus' && !this.focusNoticeShown) this.toast('Refocusing (Safari only allows a full-frame autofocus pass)');
+    else if (result === 'unsupported' && !this.focusNoticeShown) this.toast('This browser does not expose focus control on this lens');
+    else if (result === 'refocus' && !this.focusNoticeShown) this.toast('Refocusing (this browser only allows a full-frame autofocus pass)');
     if (result === 'unsupported' || result === 'refocus') this.focusNoticeShown = true;
   }
 
@@ -1576,6 +1699,7 @@ class CameraSender {
     const input = $<HTMLInputElement>('exposure-ev');
     input.value = String(ev);
     $('ev-label').textContent = `${ev > 0 ? '+' : ''}${ev.toFixed(1)} EV`;
+    paintRange(input);
     // Hardware EV is already baked into the frames; only the residual is emulated (avoids applying it twice).
     const residual = this.softwareEv();
     this.preview.style.filter = residual === 0 ? '' : `brightness(${Math.pow(2, residual * 0.5).toFixed(3)})`;
@@ -1631,6 +1755,13 @@ class CameraSender {
   private async resizeInPlace(): Promise<boolean> {
     const track = this.track;
     if (!track || track.readyState !== 'live') return false;
+    const wasWorker = this.captureSource === 'worker' && Boolean(this.captureWorker);
+    if (wasWorker) {
+      // Stop the worker and its cloned track first: clones hold independent constraints in WebKit and
+      // keep the capture session delivering the old resolution even after this.track is resized.
+      await this.stopWorkerCapture();
+      if (track !== this.track || track.readyState !== 'live' || !this.started) return false;
+    }
     const desired = this.desiredDimensions();
     const capabilities = track.getCapabilities?.() || {};
     const maxFps = capabilities.frameRate?.max || desired.frameRate;
@@ -1652,12 +1783,46 @@ class CameraSender {
     }
     const settings = track.getSettings();
     // iOS reports the size rotated when the phone is upright (1080×1920 for a 1920×1080 capture): accept both.
-    const sameSize = (settings.width === desired.width && settings.height === desired.height)
-      || (settings.width === desired.height && settings.height === desired.width);
-    if (track !== this.track || !sameSize) return false;
-    await this.restoreTorch();
-    this.configureTrackUi();
-    await this.configureEncoder();
+    if (track !== this.track || !this.matchesDesiredSize(settings.width, settings.height)) return false;
+
+    let workerClone: MediaStreamTrack | undefined;
+    if (wasWorker) {
+      workerClone = track.clone();
+      const cloneSettings = workerClone.getSettings();
+      const cloneLowFps = desired.frameRate >= 60 && (cloneSettings.frameRate || 0) < minFps;
+      if (!this.matchesDesiredSize(cloneSettings.width, cloneSettings.height) || cloneLowFps) {
+        try {
+          await workerClone.applyConstraints({
+            width: { exact: desired.width },
+            height: { exact: desired.height },
+            frameRate: { min: minFps, ideal: desired.frameRate },
+          });
+        } catch {
+          workerClone.stop();
+          return false;
+        }
+        if (!this.matchesDesiredSize(workerClone.getSettings().width, workerClone.getSettings().height)) {
+          workerClone.stop();
+          return false;
+        }
+      }
+    }
+
+    try {
+      await this.restoreTorch();
+      this.configureTrackUi();
+      this.layoutPreview();
+      await this.configureEncoder();
+    } catch {
+      workerClone?.stop();
+      return false;
+    }
+    if (track !== this.track || !this.started) {
+      workerClone?.stop();
+      return false;
+    }
+    if (wasWorker) this.startWorkerCapture(track, this.captureGeneration, workerClone);
+    this.pendingResizeVerify = true;
     this.forceNextKeyframe = true;
     return true;
   }
@@ -1714,7 +1879,11 @@ class CameraSender {
       });
       const settings = this.micStream.getAudioTracks()[0].getSettings();
       this.selectedMicrophone = settings.deviceId || this.selectedMicrophone;
-      this.audioContext = new AudioContext({ sampleRate: settings.sampleRate || 48000, latencyHint: 'interactive' });
+      try {
+        this.audioContext = new AudioContext({ sampleRate: settings.sampleRate || 48000, latencyHint: 'interactive' });
+      } catch {
+        this.audioContext = new AudioContext({ latencyHint: 'interactive' });
+      }
       await this.audioContext.audioWorklet.addModule('/pcm-capture-worklet.js');
       const source = this.audioContext.createMediaStreamSource(this.micStream);
       this.audioNode = new AudioWorkletNode(this.audioContext, 'pcm-capture', { numberOfInputs: 1, numberOfOutputs: 1 });
@@ -1761,7 +1930,7 @@ class CameraSender {
       this.reportMicProblem(null);
       return;
     }
-    this.reportMicProblem('Tap the iPhone screen once to start the microphone (iOS needs a touch to start audio).');
+    this.reportMicProblem('Tap the phone screen once to start the microphone (mobile browsers need a touch to start audio).');
     const resumeOnTouch = () => {
       if (this.audioContext !== context) return;
       void context.resume().then(() => {
@@ -1829,6 +1998,7 @@ class CameraSender {
       const value = Number(message.value);
       $<HTMLInputElement>('zoom').value = String(value);
       $('zoom-label').textContent = `${value.toFixed(1)}×`;
+      paintRange($<HTMLInputElement>('zoom'));
       this.scheduleZoom(value);
       return;
     }
@@ -1876,7 +2046,7 @@ class CameraSender {
     $<HTMLSelectElement>('preset').value = this.preset;
     const photoNote = $('photo-mode-note');
     photoNote.hidden = !PRESETS[this.preset].photoMode;
-    photoNote.textContent = `${PHOTO_MODE_WARNING} 12 MP may be cropped to what this iPhone can encode.`;
+    photoNote.textContent = `${PHOTO_MODE_WARNING} 12 MP may be cropped to what this phone can encode.`;
     this.renderHoldHint();
     $<HTMLSelectElement>('codec').value = this.codec;
     $<HTMLSelectElement>('bitrate').value = String(this.bitrate);
@@ -1922,7 +2092,6 @@ class CameraSender {
   private sendState(): void {
     if (document.getElementById('encoder-active')) $('encoder-active').textContent = this.encoderStatusText();
     if (!this.socket.isOpen) return;
-    const labels = this.getLensLabels();
     this.socket.send(encodeControl({
       type: 'sender-state',
       settings: {
@@ -1951,7 +2120,7 @@ class CameraSender {
         exposureEv: this.exposureEv,
         softwareEv: this.softwareEv(),
       },
-      lenses: this.lenses.map((device, index) => ({ deviceId: device.deviceId, label: labels[index], detail: device.label })),
+      lenses: this.visibleLensEntries(),
       microphones: this.microphones.map((device) => ({ deviceId: device.deviceId, label: device.label })),
       capabilities: this.track?.getCapabilities?.() || {},
       trackSettings: this.track?.getSettings() || {},
@@ -1979,7 +2148,7 @@ class CameraSender {
     $('fps-live').textContent = `${fps} FPS`;
     $('queue-live').textContent = `Q${queue}`;
     $('transport').textContent = this.socket.isOpen ? this.transport.toUpperCase() : 'OFFLINE';
-    $<HTMLElement>('audio-level').style.width = `${Math.min(100, this.audioPeak * 100)}%`;
+    $<HTMLElement>('audio-level').style.setProperty('--level', String(Math.min(1, this.audioPeak)));
     $('audio-db').textContent = Number.isFinite(db) ? `${db.toFixed(1)} dB` : '−∞ dB';
     this.audioPeak *= 0.6;
 
@@ -2084,6 +2253,13 @@ class CameraSender {
       overlay.style.setProperty('--hold', '0%');
       if (remind && held && overlay.classList.contains('active')) this.flashBlackoutHint(1800);
     };
+    const exit = () => {
+      cancel(false);
+      window.clearTimeout(this.blackoutHintTimer);
+      overlay.classList.remove('active', 'show-hint');
+      document.documentElement.classList.remove('blackout-active');
+      window.getSelection()?.removeAllRanges();
+    };
     overlay.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       overlay.setPointerCapture(event.pointerId);
@@ -2093,15 +2269,14 @@ class CameraSender {
         if (!startAt) return;
         const progress = Math.min(100, ((performance.now() - startAt) / 2000) * 100);
         overlay.style.setProperty('--hold', `${progress}%`);
-        if (progress >= 100) {
-          cancel(false);
-          window.clearTimeout(this.blackoutHintTimer);
-          overlay.classList.remove('active', 'show-hint');
-          document.documentElement.classList.remove('blackout-active');
-          window.getSelection()?.removeAllRanges();
-        } else animation = requestAnimationFrame(update);
+        if (progress >= 100) exit();
+        else animation = requestAnimationFrame(update);
       };
       animation = requestAnimationFrame(update);
+    });
+    // A hardware keyboard (iPad, or a desktop browser) exits with Escape instead of the hold.
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && overlay.classList.contains('active')) exit();
     });
     overlay.addEventListener('pointerup', () => cancel(true));
     overlay.addEventListener('pointercancel', () => cancel(false));
@@ -2134,4 +2309,5 @@ class CameraSender {
   }
 }
 
+watchRanges();
 new CameraSender();

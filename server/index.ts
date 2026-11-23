@@ -41,6 +41,7 @@ const dist = resolve(process.cwd(), 'dist');
 const network = new NetworkScanner(port);
 network.start();
 const certificate = await ensureCertificate(network.snapshot);
+const certFilePath = resolve(certificate.directory, 'local-cert.pem');
 const pairingToken = await loadPairingToken(certificate.directory);
 
 const app = Fastify({
@@ -126,7 +127,9 @@ function isPairedHttp(request: import('fastify').FastifyRequest): boolean {
 // pairing key itself only for pages opened on this PC, which put it in the QR codes and the OBS URL.
 app.get('/api/network', async (request, reply) => {
   if (!isPairedHttp(request)) return reply.code(401).send();
-  return isLocalRequest(request.socket.remoteAddress, request.headers) ? { ...network.snapshot, pairingToken } : network.snapshot;
+  return isLocalRequest(request.socket.remoteAddress, request.headers)
+    ? { ...network.snapshot, pairingToken, certPath: certFilePath, platform: process.platform }
+    : network.snapshot;
 });
 
 const MAX_DIAGNOSTIC_REPORTS = 50;
@@ -225,19 +228,19 @@ const warnedLinkDown = new Set<string>();
 const reportFirewall = (snapshot: typeof network.snapshot) => {
   for (const endpoint of snapshot.usb) {
     if (!endpoint.linkDown) {
-      if (warnedLinkDown.delete(endpoint.name)) console.log(`✓ The iPhone is answering again on "${endpoint.name}".`);
+      if (warnedLinkDown.delete(endpoint.name)) console.log(`✓ The phone is answering again on "${endpoint.name}".`);
       continue;
     }
     if (warnedLinkDown.has(endpoint.name)) continue;
     warnedLinkDown.add(endpoint.name);
-    console.warn(`\n⚠ "${endpoint.name}" is up but the iPhone does not answer (no ARP reply from its hotspot address).`);
-    console.warn('  On the iPhone: Settings → Personal Hotspot → toggle "Allow Others to Join" off/on, keep the screen open,');
+    console.warn(`\n⚠ "${endpoint.name}" is up but the phone does not answer (no ARP reply from its hotspot address).`);
+    console.warn('  On iPhone: Settings → Personal Hotspot → toggle "Allow Others to Join" off/on, keep the screen open,');
     console.warn('  then unplug/replug the cable and tap "Trust" if asked.\n');
   }
   for (const endpoint of [...snapshot.usb, ...snapshot.wifi]) {
     if (!endpoint.firewallFix || warnedFirewall.has(endpoint.name)) continue;
     warnedFirewall.add(endpoint.name);
-    console.warn(`\n⚠ "${endpoint.name}" (${endpoint.address}) is a Public network: Windows Firewall will block the iPhone.`);
+    console.warn(`\n⚠ "${endpoint.name}" (${endpoint.address}) is a Public network: Windows Firewall will block the phone.`);
     console.warn('  Run once in PowerShell as administrator:');
     console.warn(`  ${endpoint.firewallFix}\n`);
   }

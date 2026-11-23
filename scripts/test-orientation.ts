@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { encodeRotation, holdState, rotatePoint, sensorRotation } from '../src/stream-settings';
+import { encodeRotation, holdState, rotatePoint, sensorRotation, uprightEncodeRotation } from '../src/stream-settings';
 
 /** Shape of the picture the PC draws: the buffer turned by the rotation sent with it. */
 const shape = (width: number, height: number, rotation: number) => {
@@ -37,6 +37,16 @@ assert.equal(shape(1080, 1920, encodeRotation(0, 0, 1080, 1920, 'landscape')), '
 // Desktop browsers deliver upright frames: 16:9 as is, 9:16 a quarter turn.
 assert.equal(sensorRotation('landscape', false, 'user', false), 0);
 assert.equal(sensorRotation('portrait', false, 'user', false), 90);
+
+// Android Chrome delivers frames already upright (portrait when held upright, landscape when sideways).
+assert.equal(uprightEncodeRotation(1080, 1920, 0, 'portrait', false), 0, 'Android upright portrait stays upright');
+assert.equal(uprightEncodeRotation(1080, 1920, 0, 'portrait', true), 180, 'Android upright portrait + Rotate 180°');
+assert.equal(uprightEncodeRotation(1920, 1080, 0, 'landscape', false), 0, 'Android sideways landscape stays upright');
+assert.equal(uprightEncodeRotation(1920, 1080, 0, 'landscape', true), 180, 'Android sideways landscape + Rotate 180°');
+assert.equal(uprightEncodeRotation(1080, 1920, 0, 'landscape', false), 90, 'Android upright with 16:9 chosen rotates to landscape');
+assert.equal(uprightEncodeRotation(1920, 1080, 0, 'portrait', false), 90, 'Android sideways with 9:16 chosen rotates to portrait');
+assert.equal(uprightEncodeRotation(1920, 1080, 90, 'portrait', false), 90, 'Sensor frame with display=90 honours rotation');
+assert.equal(uprightEncodeRotation(1920, 1080, 270, 'portrait', false), 270, 'Sensor frame with display=270 honours rotation');
 
 // Hold warning: compares the rotation sent with how iOS would show the camera for the way the phone is held.
 // WebKit's rotations (back camera): phone sideways (landscape) 0, upright 90, upside-down landscape 180.
