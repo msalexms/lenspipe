@@ -1,22 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-tema="claro">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#fbfaf7" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%231a1a18'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23f4f3ef' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%232d6a3e'/%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-2 -2 52 52'%3E%3Cpath d='M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z' fill='%232B36D9' stroke='%231E1B2E' stroke-width='2.6' stroke-linejoin='round'/%3E%3Cpath d='M13 25l6 5-6 5M24 36h10' fill='none' stroke='%23fff' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>Camera Link · Studio</title>
     <link rel="stylesheet" href="/src/control.css" />
   </head>
   <body>
     <div class="studio-shell">
       <header class="studio-header">
-        <a class="studio-brand logo" href="/control">camera link <span>· studio</span></a>
+        <h1 class="visually-hidden">Camera Link Studio</h1>
+        <a class="studio-brand logo" href="/control" translate="no"><svg class="thor" width="36" height="36" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>camera link <span>studio</span></a>
+        <svg class="sticker header-sticker" width="40" height="40" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
         <div class="header-actions">
-          <span id="connection-status" class="status-chip"><i aria-hidden="true"></i><span>Waiting for iPhone</span></span>
-          <button id="show-connection" type="button" class="secondary-button">Connect iPhone</button>
-          <button id="header-settings" type="button" class="secondary-button" aria-haspopup="dialog">Settings</button>
-          <button id="open-obs" type="button" class="secondary-button">OBS source</button>
+          <span id="connection-status" class="status-chip pill" role="status"><i aria-hidden="true"></i><span>Waiting for iPhone…</span></span>
+          <button id="show-connection" type="button" class="secondary-button with-icon ico-plug">Connect iPhone</button>
+          <button id="header-settings" type="button" class="secondary-button with-icon ico-sliders" aria-haspopup="dialog">Settings</button>
+          <button id="open-obs" type="button" class="secondary-button yellow-button with-icon ico-obs">OBS source</button>
         </div>
       </header>
 
@@ -25,12 +27,13 @@
           <div class="window">
             <div class="window-bar">
               <span class="window-title kicker">Live preview · iPhone</span>
-              <span class="preview-topline"><span id="transport-badge" class="transport-badge">NO SIGNAL</span><span id="preview-resolution">— × —</span></span>
+              <span class="preview-topline"><span class="pill"><span class="dot live-dot" aria-hidden="true"></span><span id="transport-badge" class="transport-badge">NO SIGNAL</span></span><span id="preview-resolution" class="pill mono">— × —</span></span>
             </div>
             <div class="preview-frame">
               <canvas id="preview" title="Click to focus (when Focus is Continuous)"></canvas>
               <div id="focus-ring" class="focus-ring" aria-hidden="true"></div>
               <div id="waiting" class="waiting-overlay">
+                <svg class="sticker" width="72" height="72" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
                 <div class="pulse-ring"></div>
                 <span class="kicker">No signal</span>
                 <strong>Camera is offline</strong>
@@ -57,8 +60,8 @@
             <div><span>Dropped</span><strong id="metric-dropped">0</strong><small>decoder + transport</small></div>
           </div>
           <div class="preview-actions">
-            <button id="force-keyframe" type="button" class="primary-button" disabled>Force keyframe <kbd>K</kbd></button>
-            <button id="audio-monitor" type="button" class="secondary-button" aria-pressed="false">Preview audio: off</button>
+            <button id="force-keyframe" type="button" class="secondary-button ink-button" disabled>Force keyframe <kbd>K</kbd></button>
+            <button id="audio-monitor" type="button" class="secondary-button with-icon ico-mic" aria-pressed="false">Preview audio: off</button>
             <span id="audio-status" class="audio-status" data-level="idle">iPhone mic off</span>
             <span>Changes are applied directly on the iPhone.</span>
           </div>
@@ -66,6 +69,7 @@
 
         <aside class="control-panel">
           <div class="panel-heading">
+            <svg class="sticker" width="54" height="54" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
             <div><span class="kicker">Remote control</span><h2>Camera</h2></div>
             <i id="remote-dot" aria-hidden="true"></i>
           </div>
@@ -73,7 +77,11 @@
           <section class="control-section">
             <div class="section-title">Capture</div>
             <div class="group">
-              <label class="row" for="remote-lens"><span class="row-label">Lens</span><select id="remote-lens" disabled><option>Waiting for camera</option></select></label>
+              <div class="row lens-row">
+                <span class="row-label" id="lens-label">Lens</span>
+                <div id="remote-lens-buttons" class="segments" role="group" aria-labelledby="lens-label"></div>
+                <select id="remote-lens" class="visually-hidden" tabindex="-1" aria-hidden="true" disabled><option>Waiting for camera…</option></select>
+              </div>
               <div class="camera-modes">
                 <button id="remote-torch" type="button" class="row switch-row" aria-pressed="false" disabled><span>OFF</span><b class="row-label">Torch</b></button>
                 <button id="remote-mic" type="button" class="row switch-row" aria-pressed="false" disabled><span>OFF</span><b class="row-label">iPhone mic</b></button>
@@ -86,13 +94,22 @@
             <div class="group">
               <div class="row">
                 <span class="row-label">Aspect</span>
-                <div class="segment-control"><button id="landscape" type="button" class="active" aria-pressed="true" disabled>16:9 <small>Landscape</small></button><button id="portrait" type="button" aria-pressed="false" disabled>9:16 <small>Portrait</small></button></div>
+                <div class="segment-control segments"><button id="landscape" type="button" class="active" aria-pressed="true" disabled>16:9 <small>Landscape</small></button><button id="portrait" type="button" aria-pressed="false" disabled>9:16 <small>Portrait</small></button></div>
               </div>
               <button id="remote-turned" type="button" class="row switch-row" aria-pressed="false" disabled><span>OFF</span><b class="row-label">Rotate 180°</b></button>
-              <button id="open-settings" class="row stream-summary" type="button" aria-haspopup="dialog">
-                <span class="row-label"><strong id="stream-summary">1080p60 · H.264 · 60 Mbps</strong><small id="stream-summary-detail">VBR · quality mode</small></span>
-                <b class="chevron">Settings →</b>
-              </button>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <div class="group stream-box">
+              <div class="stream-head"><span class="section-title">Stream</span><button id="open-settings" class="secondary-button small-button" type="button" aria-haspopup="dialog">Settings →</button></div>
+              <dl class="cajetin">
+                <div><dt>Format</dt><dd id="sum-format">—</dd></div>
+                <div><dt>Codec</dt><dd id="sum-codec">—</dd></div>
+                <div><dt>Bitrate</dt><dd id="sum-bitrate">—</dd></div>
+                <div><dt>Rate · mode</dt><dd id="sum-mode">—</dd></div>
+              </dl>
+              <p class="stream-detail"><strong id="stream-summary" hidden></strong><small id="stream-summary-detail"></small></p>
             </div>
           </section>
 
@@ -124,7 +141,7 @@
             </div>
           </section>
 
-          <footer class="panel-footer kicker">WebCodecs · binary WebSocket · hardware decode<span id="encoder-mode">Encoder idle</span><span class="signature">by <b>[AMS]</b> AMSTech</span></footer>
+          <footer class="panel-footer">WebCodecs · binary WebSocket · hardware decode<span id="encoder-mode">Encoder idle</span><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · MIT</span></footer>
         </aside>
       </main>
     </div>
@@ -132,8 +149,9 @@
     <dialog id="settings-modal" aria-labelledby="settings-title">
       <form method="dialog" class="modal-card settings-card">
         <header>
+          <svg class="sticker" width="48" height="48" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
           <div><span class="eyebrow">Applied on the iPhone</span><h2 id="settings-title">Stream settings</h2><p>Changes apply immediately and are remembered by the iPhone.</p></div>
-          <button class="close-modal" value="close" aria-label="Close">×</button>
+          <button class="close-modal with-icon ico-x" value="close" aria-label="Close"></button>
         </header>
 
         <section class="settings-block">
@@ -150,13 +168,13 @@
             <div class="group">
               <label class="row" for="remote-preset"><span class="row-label">Format</span><select id="remote-preset" disabled><optgroup label="16:9 · video modes"><option value="4k30" selected>4K · 30 fps</option><option value="4k60">4K · 60 fps</option><option value="1080p60">1080p · 60 fps</option><option value="1080p30">1080p · 30 fps</option></optgroup><optgroup label="4:3 · photo modes (no iPhone video processing)"><option value="4x3-12mp30">12 MP · 30 fps</option><option value="4x3-1440p30">1440p · 30 fps</option><option value="4x3-1080p60">1080p · 60 fps</option></optgroup></select></label>
               <label class="row" for="remote-codec"><span class="row-label">Codec</span><select id="remote-codec" disabled><option value="avc1.640032">H.264 High</option><option value="hvc1.1.6.L153.B0">HEVC Main</option></select></label>
-              <div class="row slider-row">
+              <div class="row slider-row bitrate-row">
                 <label class="row-label" for="remote-bitrate">Bitrate</label>
                 <strong id="bitrate-value">60 Mbps</strong>
                 <input id="remote-bitrate" type="range" min="20" max="200" step="10" value="60" disabled />
+                <div class="range-labels"><span>20 · Wi-Fi</span><span>200 Mbps · USB</span></div>
               </div>
             </div>
-            <div class="range-labels"><span>20 · Wi-Fi</span><span>200 Mbps · USB</span></div>
           </section>
 
           <section class="settings-block control-section">
@@ -166,7 +184,7 @@
               <label class="row" for="remote-latency"><span class="row-label">Mode</span><select id="remote-latency" disabled><option value="quality">Quality · lookahead</option><option value="realtime">Realtime · lowest delay</option></select></label>
             </div>
             <p id="remote-photo-mode-note" class="settings-note photo-mode-note" hidden></p>
-            <p id="settings-encoder-status" class="settings-note">Connect an iPhone to apply settings.</p>
+            <p id="settings-encoder-status" class="settings-note encoder-note">Connect an iPhone to apply settings.</p>
           </section>
 
           <section class="settings-block control-section">
@@ -187,15 +205,25 @@
       </form>
     </dialog>
 
-    <dialog id="connection-modal">
+    <dialog id="connection-modal" aria-labelledby="connection-title">
       <form method="dialog" class="modal-card">
         <header>
-          <div><span class="eyebrow">Direct local connection</span><h2>Connect your iPhone</h2><p>Scan a code with the iOS Camera app, then accept the local certificate.</p></div>
-          <button class="close-modal" value="close" aria-label="Close">×</button>
+          <svg class="thor" width="46" height="46" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>
+          <div><span class="eyebrow">Direct local connection</span><h2 id="connection-title">Connect your iPhone</h2><p>Scan a code with the iOS Camera app, then accept the local certificate.</p></div>
+          <button class="close-modal with-icon ico-x" value="close" aria-label="Close"></button>
         </header>
         <div class="connection-grid">
-          <section class="endpoint-card usb-card"><div class="endpoint-heading"><span class="recommended">Priority</span><h3>USB cable</h3><p>Connect iPhone by USB and enable Personal Hotspot on the iPhone.</p></div><div id="usb-endpoints" class="endpoint-list"></div></section>
-          <section class="endpoint-card"><div class="endpoint-heading"><span>Alternative</span><h3>Wi-Fi LAN</h3><p>Connect your iPhone and PC to the same router or local network.</p></div><div id="wifi-endpoints" class="endpoint-list"></div></section>
+          <section class="endpoint-card usb-card">
+            <div class="endpoint-heading"><div><span class="recommended">Priority</span><h3 class="with-icon ico-plug">USB cable</h3></div><span id="usb-state" class="pill"><span class="dot" aria-hidden="true"></span><span>Not detected</span></span></div>
+            <div id="usb-steps" class="steps-bar"></div>
+            <p>Connect iPhone by USB and enable Personal Hotspot on the iPhone.</p>
+            <div id="usb-endpoints" class="endpoint-list"></div>
+          </section>
+          <section class="endpoint-card">
+            <div class="endpoint-heading"><div><span>Alternative</span><h3 class="with-icon ico-wifi">Wi-Fi LAN</h3></div><span id="wifi-state" class="pill"><span class="dot" aria-hidden="true"></span><span>No network</span></span></div>
+            <p>Connect your iPhone and PC to the same router or local network.</p>
+            <div id="wifi-endpoints" class="endpoint-list"></div>
+          </section>
         </div>
         <footer><span>Endpoints refresh automatically every 3 seconds.</span><a href="/sender" target="_blank" rel="noopener noreferrer">Open sender on this device ↗</a></footer>
       </form>

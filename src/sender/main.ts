@@ -10,6 +10,7 @@ import {
   type ControlMessage,
 } from '../protocol';
 import { BinarySocket } from '../socket';
+import { paintRange, watchRanges } from '../amstech-ui';
 import {
   CODEC_H264,
   CODEC_HEVC,
@@ -1238,7 +1239,7 @@ class CameraSender {
         }
         this.encoderErrorCount++;
         if (this.encoderErrorCount > 2) {
-          this.toast('Encoder stopped after repeated errors');
+          this.toast('Encoder stopped after repeated errors. Try H.264 or a lower format in Settings, or reload the page.', 6000);
           return;
         }
         this.toast('Encoder restarted after an error');
@@ -1355,6 +1356,7 @@ class CameraSender {
       zoomInput.step = String(zoom.step || 0.1);
       zoomInput.value = String((settings as MediaTrackSettings & { zoom?: number }).zoom || zoom.min);
       $('zoom-label').textContent = `${Number(zoomInput.value).toFixed(1)}×`;
+      paintRange(zoomInput);
     }
     $<HTMLButtonElement>('torch').disabled = !capabilities.torch;
     this.configureModeSelect('focus-mode', capabilities.focusMode, this.focusMode);
@@ -1576,6 +1578,7 @@ class CameraSender {
     const input = $<HTMLInputElement>('exposure-ev');
     input.value = String(ev);
     $('ev-label').textContent = `${ev > 0 ? '+' : ''}${ev.toFixed(1)} EV`;
+    paintRange(input);
     // Hardware EV is already baked into the frames; only the residual is emulated (avoids applying it twice).
     const residual = this.softwareEv();
     this.preview.style.filter = residual === 0 ? '' : `brightness(${Math.pow(2, residual * 0.5).toFixed(3)})`;
@@ -1829,6 +1832,7 @@ class CameraSender {
       const value = Number(message.value);
       $<HTMLInputElement>('zoom').value = String(value);
       $('zoom-label').textContent = `${value.toFixed(1)}×`;
+      paintRange($<HTMLInputElement>('zoom'));
       this.scheduleZoom(value);
       return;
     }
@@ -1979,7 +1983,7 @@ class CameraSender {
     $('fps-live').textContent = `${fps} FPS`;
     $('queue-live').textContent = `Q${queue}`;
     $('transport').textContent = this.socket.isOpen ? this.transport.toUpperCase() : 'OFFLINE';
-    $<HTMLElement>('audio-level').style.width = `${Math.min(100, this.audioPeak * 100)}%`;
+    $<HTMLElement>('audio-level').style.setProperty('--level', String(Math.min(1, this.audioPeak)));
     $('audio-db').textContent = Number.isFinite(db) ? `${db.toFixed(1)} dB` : '−∞ dB';
     this.audioPeak *= 0.6;
 
@@ -2084,6 +2088,13 @@ class CameraSender {
       overlay.style.setProperty('--hold', '0%');
       if (remind && held && overlay.classList.contains('active')) this.flashBlackoutHint(1800);
     };
+    const exit = () => {
+      cancel(false);
+      window.clearTimeout(this.blackoutHintTimer);
+      overlay.classList.remove('active', 'show-hint');
+      document.documentElement.classList.remove('blackout-active');
+      window.getSelection()?.removeAllRanges();
+    };
     overlay.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       overlay.setPointerCapture(event.pointerId);
@@ -2093,15 +2104,14 @@ class CameraSender {
         if (!startAt) return;
         const progress = Math.min(100, ((performance.now() - startAt) / 2000) * 100);
         overlay.style.setProperty('--hold', `${progress}%`);
-        if (progress >= 100) {
-          cancel(false);
-          window.clearTimeout(this.blackoutHintTimer);
-          overlay.classList.remove('active', 'show-hint');
-          document.documentElement.classList.remove('blackout-active');
-          window.getSelection()?.removeAllRanges();
-        } else animation = requestAnimationFrame(update);
+        if (progress >= 100) exit();
+        else animation = requestAnimationFrame(update);
       };
       animation = requestAnimationFrame(update);
+    });
+    // A hardware keyboard (iPad, or a desktop browser) exits with Escape instead of the hold.
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && overlay.classList.contains('active')) exit();
     });
     overlay.addEventListener('pointerup', () => cancel(true));
     overlay.addEventListener('pointercancel', () => cancel(false));
@@ -2134,4 +2144,5 @@ class CameraSender {
   }
 }
 
+watchRanges();
 new CameraSender();
