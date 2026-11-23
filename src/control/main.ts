@@ -4,6 +4,7 @@ import { pairingToken, rememberPairingToken, withPairingToken } from '../pairing
 import type { ControlMessage } from '../protocol';
 import { HealthBanner, HealthMonitor } from '../health';
 import {
+  DEFAULT_SETTINGS,
   PHOTO_MODE_WARNING,
   PRESETS,
   presetSize,
@@ -445,6 +446,7 @@ function applySenderState(message: ControlMessage): void {
     $('ev-value').textContent = `${ev > 0 ? '+' : ''}${ev.toFixed(1)} EV`;
   }
   paintRanges();
+  if ($<HTMLDialogElement>('obs-modal').open) updateObsModal();
 }
 
 /** The stream box of the side panel: the current settings as a cajetín (format, codec, bitrate, rate · mode). */
@@ -596,6 +598,7 @@ function enableBackdropClose(dialog: HTMLDialogElement): void {
 enableBackdropClose($<HTMLDialogElement>('settings-modal'));
 enableBackdropClose($<HTMLDialogElement>('connection-modal'));
 enableBackdropClose($<HTMLDialogElement>('about-modal'));
+enableBackdropClose($<HTMLDialogElement>('obs-modal'));
 const openSettings = () => $<HTMLDialogElement>('settings-modal').showModal();
 const openAbout = () => $<HTMLDialogElement>('about-modal').showModal();
 $('open-settings').addEventListener('click', openSettings);
@@ -673,11 +676,39 @@ $('audio-monitor').addEventListener('click', () => {
   renderAudioStatus();
 });
 receiver.setAudioMuted(true);
+function obsUrl(): string {
+  return withPairingToken(`${location.origin}/obs`);
+}
+
+function updateObsModal(): void {
+  $('obs-url').textContent = obsUrl();
+  const localHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
+  const lanBase = latestNetwork.wifi[0]?.url;
+  if (localHost) {
+    $('obs-url-hint').textContent = lanBase
+      ? `Use this URL when OBS runs on this PC (no pairing key needed). From another PC on the same LAN, use ${withPairingToken(`${lanBase}/obs`)}.`
+      : 'Use this URL when OBS runs on this PC (no pairing key needed here).';
+  } else {
+    $('obs-url-hint').textContent = 'Includes the pairing key (#k=…) required by OBS on another device.';
+  }
+  const activePreset = latestSettings ? PRESETS[latestSettings.preset] : PRESETS[DEFAULT_SETTINGS.preset];
+  const activeOrientation = latestSettings?.orientation ?? DEFAULT_SETTINGS.orientation;
+  const size = presetSize(activePreset, activeOrientation);
+  $('obs-size-hint').textContent = `${size.width} × ${size.height}`;
+}
+
 $('open-obs').addEventListener('click', (event) => {
-  if (event.shiftKey) window.open('/obs', '_blank');
-  else void copyText(withPairingToken(`${location.origin}/obs`), 'OBS browser source URL');
+  if (event.shiftKey) {
+    window.open('/obs', '_blank');
+    return;
+  }
+  updateObsModal();
+  $<HTMLDialogElement>('obs-modal').showModal();
 });
-$('open-obs').title = 'Click to copy the OBS URL. Shift-click to open it.';
+$('open-obs').title = 'Show OBS Studio setup guide and URL. Shift-click to open /obs directly.';
+$('obs-copy-url').addEventListener('click', () => void copyText(obsUrl(), 'OBS browser source URL'));
+$('obs-open-preview').addEventListener('click', () => window.open('/obs', '_blank'));
+$('obs-copy-cert').addEventListener('click', () => void copyText($('obs-cert-cmd').textContent || '', 'Certificate command'));
 $('show-connection').addEventListener('click', openConnection);
 $('waiting-connect').addEventListener('click', openConnection);
 function openConnection(): void {
@@ -727,6 +758,7 @@ async function renderNetwork(network: NetworkSnapshot): Promise<void> {
     renderEndpoints('usb-endpoints', network.usb, 'No phone USB interface detected. Connect the cable and enable Personal Hotspot (iPhone) or USB tethering (Android).', generation),
     renderEndpoints('wifi-endpoints', network.wifi, 'No private LAN interface detected. Connect this PC to Wi-Fi or Ethernet.', generation),
   ]);
+  if ($<HTMLDialogElement>('obs-modal').open) updateObsModal();
 }
 
 function setStatePill(id: string, on: boolean, text: string): void {

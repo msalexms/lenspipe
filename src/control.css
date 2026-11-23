@@ -203,6 +203,26 @@ dialog.about-dialog { width: min(680px, calc(100vw - 32px)); }
 .about-specs { margin-top: 18px; }
 .about-specs dd { white-space: normal; }
 
+dialog.obs-dialog { width: min(820px, calc(100vw - 32px)); }
+.obs-url-card { padding: 14px 16px; background: var(--hoja); border: var(--ancho) solid var(--borde); border-radius: var(--r); box-shadow: var(--sombra); min-width: 0; }
+.obs-url-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.obs-url-head .section-title { margin: 0; }
+.obs-url-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.obs-url { flex: 1 1 220px; min-width: 0; padding: 9px 12px; border: 2px solid var(--borde); border-radius: var(--r); background: var(--ams-fondo); font: 500 .84rem/1.4 var(--mono); overflow-wrap: anywhere; user-select: all; }
+.obs-url-card > small { display: block; margin-top: 8px; color: var(--gris); font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
+.obs-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; margin-top: 18px; align-items: start; }
+.obs-steps-card { padding: 16px; background: var(--hoja); border: var(--ancho) solid var(--borde); border-radius: var(--r); box-shadow: var(--sombra); min-width: 0; }
+.obs-steps-card h3 { margin: 4px 0 12px; font: 800 1.25rem/1.15 var(--titulos); letter-spacing: -.015em; }
+.obs-steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: obs-step; }
+.obs-steps li { position: relative; min-width: 0; padding-left: 32px; font-size: .88rem; line-height: 1.45; color: var(--tinta2); overflow-wrap: anywhere; counter-increment: obs-step; }
+.obs-steps li::before {
+  content: counter(obs-step); position: absolute; left: 0; top: 1px; display: grid; place-items: center;
+  width: 22px; height: 22px; border: 2px solid var(--borde); border-radius: 50%; background: var(--amarillo);
+  color: var(--tinta); font: 800 .75rem/1 var(--mono);
+}
+.obs-steps li strong { color: var(--tinta); }
+.obs-trust-card { min-width: 0; margin-top: 0; align-self: start; }
+
 #studio-toast {
   position: fixed; left: 50%; bottom: 24px; z-index: 50; max-width: min(640px, calc(100vw - 32px));
   padding: 10px 16px; border-radius: var(--r); background: var(--tinta); color: #fff; font-size: .9rem; font-weight: 700; box-shadow: 3px 3px 0 #8A86A0;
@@ -218,6 +238,9 @@ dialog.about-dialog { width: min(680px, calc(100vw - 32px)); }
   .preview-frame { height: 56vw; }
   .telemetry-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .header-sticker { display: none; }
+}
+@media (max-width: 720px) {
+  .obs-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 650px) {
   .studio-header { min-height: 60px; padding: 8px 14px; gap: 10px; }
