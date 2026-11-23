@@ -93,7 +93,8 @@ function interfaceOrientation(): number {
   return angle === 270 ? -90 : angle;
 }
 const MIN_FORCED_KEYFRAME_GAP_MS = 250;
-const PREFERENCES_KEY = 'camera-link:stream-settings';
+const PREFERENCES_KEY = 'lenspipe:stream-settings';
+const LEGACY_PREFERENCES_KEY = 'camera-link:stream-settings';
 
 interface EncoderCandidate {
   config: VideoEncoderConfig & Record<string, unknown>;
@@ -105,7 +106,8 @@ interface EncoderCandidate {
 
 function loadPreferences(): Partial<StreamSettings> {
   try {
-    return sanitizeSettings(JSON.parse(localStorage.getItem(PREFERENCES_KEY) || '{}'));
+    const stored = localStorage.getItem(PREFERENCES_KEY) ?? localStorage.getItem(LEGACY_PREFERENCES_KEY);
+    return sanitizeSettings(JSON.parse(stored || '{}'));
   } catch {
     return {};
   }

@@ -5,21 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Camera Link · Studio</title>
+    <title>LensPipe · Studio</title>
     <link rel="stylesheet" href="/src/control.css" />
   </head>
   <body>
     <div class="studio-shell">
       <header class="studio-header">
-        <h1 class="visually-hidden">Camera Link Studio</h1>
-        <a class="studio-brand logo" href="/control" translate="no"><svg class="thor" width="36" height="36" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>camera link <span>amstech</span></a>
-        <svg class="sticker header-sticker" width="40" height="40" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
+        <h1 class="visually-hidden">LensPipe Studio</h1>
+        <a class="studio-brand logo" href="/control" translate="no"><svg class="thor" width="36" height="36" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>lenspipe <span>amstech</span></a>
+        <svg class="sticker header-sticker" width="44" height="41" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
         <div class="header-actions">
           <span id="connection-status" class="status-chip pill" role="status"><i aria-hidden="true"></i><span>Waiting for phone…</span></span>
           <button id="show-connection" type="button" class="secondary-button with-icon ico-plug">Connect phone</button>
           <button id="header-settings" type="button" class="secondary-button with-icon ico-sliders" aria-haspopup="dialog">Settings</button>
           <button id="open-obs" type="button" class="secondary-button yellow-button with-icon ico-obs">OBS source</button>
-          <button id="header-about" type="button" class="secondary-button icon-button with-icon ico-info" aria-haspopup="dialog" aria-label="About Camera Link" title="About"></button>
+          <button id="header-about" type="button" class="secondary-button icon-button with-icon ico-info" aria-haspopup="dialog" aria-label="About LensPipe" title="About"></button>
         </div>
       </header>
 
@@ -34,7 +34,7 @@
               <canvas id="preview" title="Click to focus (when Focus is Continuous)"></canvas>
               <div id="focus-ring" class="focus-ring" aria-hidden="true"></div>
               <div id="waiting" class="waiting-overlay">
-                <svg class="sticker" width="72" height="72" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
+                <svg class="sticker" width="78" height="73" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
                 <div class="pulse-ring"></div>
                 <span class="kicker">No signal</span>
                 <strong>Camera is offline</strong>
@@ -70,7 +70,7 @@
 
         <aside class="control-panel">
           <div class="panel-heading">
-            <svg class="sticker" width="54" height="54" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
+            <svg class="sticker" width="58" height="54" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
             <div><span class="kicker">Remote control</span><h2>Camera</h2></div>
             <i id="remote-dot" aria-hidden="true"></i>
           </div>
@@ -150,7 +150,7 @@
     <dialog id="settings-modal" aria-labelledby="settings-title">
       <form method="dialog" class="modal-card settings-card">
         <header>
-          <svg class="sticker" width="48" height="48" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
+          <svg class="sticker" width="52" height="48" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
           <div><span class="eyebrow">Applied on the phone</span><h2 id="settings-title">Stream settings</h2><p>Changes apply immediately and are remembered by the phone.</p></div>
           <button class="close-modal with-icon ico-x" value="close" aria-label="Close"></button>
         </header>
@@ -233,8 +233,8 @@
     <dialog id="about-modal" class="about-dialog" aria-labelledby="about-title">
       <form method="dialog" class="modal-card">
         <header>
-          <svg class="sticker" width="48" height="48" viewBox="-6 -6 76 76" aria-hidden="true"><g class="fondo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><g class="cuerpo"><rect x="21" y="9" width="20" height="10" rx="3"/><rect x="5" y="16" width="54" height="38" rx="9"/></g><circle class="lente" cx="32" cy="35" r="12"/><circle class="pupila" cx="32" cy="35" r="5"/></svg>
-          <div><span class="eyebrow">An AMSTech project</span><h2 id="about-title">Camera Link</h2><p>Low-latency local studio camera for PC and OBS — iPhone &amp; Android, no app, no cloud, no account.</p></div>
+          <svg class="sticker" width="52" height="48" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
+          <div><span class="eyebrow">An AMSTech project</span><h2 id="about-title">LensPipe</h2><p>Low-latency local studio camera for PC and OBS — iPhone &amp; Android, no app, no cloud, no account.</p></div>
           <button class="close-modal with-icon ico-x" value="close" aria-label="Close"></button>
         </header>
         <section class="about-brand-card">

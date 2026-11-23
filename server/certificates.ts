@@ -71,7 +71,7 @@ export async function ensureCertificate(network: NetworkSnapshot): Promise<Certi
       { type: 2, value: 'localhost' },
       ...uniqueAddresses.map((ip) => ({ type: 7 as const, ip })),
     ];
-    const pems = selfsigned.generate([{ name: 'commonName', value: 'Camera Link' }], {
+    const pems = selfsigned.generate([{ name: 'commonName', value: 'LensPipe' }], {
       days: 825,
       keySize: 2048,
       algorithm: 'sha256',
