@@ -8,12 +8,15 @@ import {
   PRESETS,
   presetSize,
   PROFILES,
+  aspectLabel,
+  codecName,
   describeSettings,
   formatTrackMode,
   matchingProfile,
   type ProfileName,
   type StreamSettings,
 } from '../stream-settings';
+import { paintRanges, stepsBar, watchRanges } from '../amstech-ui';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 type NetworkEndpoint = { name: string; address: string; url: string; networkCategory?: string; firewallFix?: string; linkDown?: boolean };
@@ -136,7 +139,7 @@ function setOnline(online: boolean): void {
   phoneOnline = online;
   $('waiting').classList.toggle('hidden', online);
   const statusChip = $('connection-status');
-  const statusText = online ? 'iPhone connected' : 'Waiting for iPhone';
+  const statusText = online ? 'iPhone connected' : 'Waiting for iPhone…';
   statusChip.classList.toggle('online', online);
   statusChip.title = statusText;
   const dot = document.createElement('i');
@@ -151,6 +154,7 @@ function setOnline(online: boolean): void {
   for (const id of onlineControls) {
     $<HTMLSelectElement | HTMLButtonElement | HTMLInputElement>(id).disabled = !online;
   }
+  syncLensButtons();
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-profile]')) {
     button.disabled = !online;
     if (!online) button.classList.remove('active');
@@ -174,7 +178,7 @@ function setOnline(online: boolean): void {
     $('metric-queue').textContent = 'decoder queue 0';
     $('encoder-mode').textContent = 'Encoder idle';
     $('settings-encoder-status').textContent = 'Connect an iPhone to apply settings.';
-    $<HTMLElement>('remote-audio-level').style.width = '0%';
+    $<HTMLElement>('remote-audio-level').style.setProperty('--level', '0');
     $('remote-audio-db').textContent = '−∞ dB';
     renderAudioStatus();
   }
@@ -216,7 +220,7 @@ receiver.addEventListener('sender-telemetry', (event) => {
   if (data.width && data.height) $('preview-resolution').textContent = `${data.width} × ${data.height}`;
   const db = typeof data.audioDb === 'number' && Number.isFinite(data.audioDb) ? data.audioDb : null;
   const levelPct = db === null ? 0 : Math.max(0, Math.min(100, Math.pow(10, db / 20) * 100));
-  $<HTMLElement>('remote-audio-level').style.width = `${levelPct}%`;
+  $<HTMLElement>('remote-audio-level').style.setProperty('--level', String(levelPct / 100));
   $('remote-audio-db').textContent = db === null ? '−∞ dB' : `${db.toFixed(1)} dB`;
 });
 receiver.addEventListener('local-telemetry', (event) => {
@@ -345,6 +349,7 @@ function applySenderState(message: ControlMessage): void {
   }
   lensSelect.value = settings.selectedLens;
   lensSelect.disabled = !phoneOnline || lenses.length === 0;
+  syncLensButtons();
   const isLandscape = settings.orientation === 'landscape';
   $('landscape').classList.toggle('active', isLandscape);
   $('landscape').setAttribute('aria-pressed', String(isLandscape));
@@ -385,6 +390,7 @@ function applySenderState(message: ControlMessage): void {
   const summary = describeSettings(latestSettings);
   $('stream-summary').textContent = summary.title;
   $('stream-summary-detail').textContent = summary.detail;
+  renderStreamSummary(latestSettings);
   const status = settings.encoderStatus || (settings.bitrateMode === 'constant' ? 'CBR active' : 'VBR active');
   $('encoder-mode').textContent = status;
   $('settings-encoder-status').textContent = status;
@@ -410,7 +416,7 @@ function applySenderState(message: ControlMessage): void {
   micSelect.value = settings.selectedMicrophone || '';
   micSelect.disabled = !phoneOnline || !settings.micEnabled;
   if (!settings.micEnabled) {
-    $<HTMLElement>('remote-audio-level').style.width = '0%';
+    $<HTMLElement>('remote-audio-level').style.setProperty('--level', '0');
     $('remote-audio-db').textContent = '−∞ dB';
   }
 
@@ -437,6 +443,54 @@ function applySenderState(message: ControlMessage): void {
     const ev = settings.exposureEv;
     evInput.value = String(ev);
     $('ev-value').textContent = `${ev > 0 ? '+' : ''}${ev.toFixed(1)} EV`;
+  }
+  paintRanges();
+}
+
+/** The stream box of the side panel: the current settings as a cajetín (format, codec, bitrate, rate · mode). */
+function renderStreamSummary(settings: StreamSettings): void {
+  $('sum-format').textContent = `${PRESETS[settings.preset].label} · ${aspectLabel(settings)}`;
+  $('sum-codec').textContent = codecName(settings.codec);
+  $('sum-bitrate').textContent = `${Math.round(settings.bitrate / 1_000_000)} Mbps`;
+  $('sum-mode').textContent = `${settings.bitrateMode === 'variable' ? 'VBR' : 'CBR'} · ${settings.latencyMode === 'quality' ? 'quality' : 'realtime'}`;
+}
+
+/**
+ * Lens as segmented buttons, like the iPhone. The hidden <select> stays the source of truth: the buttons set its
+ * value and fire its change event, so the command code is the same.
+ */
+let lensButtonsKey: string | null = null;
+function syncLensButtons(): void {
+  const select = $<HTMLSelectElement>('remote-lens');
+  const box = $('remote-lens-buttons');
+  const options = latestLensesKey ? [...select.options] : [];
+  const key = options.map((option) => `${option.value}:${option.text}`).join('|');
+  if (key !== lensButtonsKey) {
+    lensButtonsKey = key;
+    if (!options.length) {
+      box.replaceChildren(Object.assign(document.createElement('span'), { className: 'segments-empty', textContent: 'Waiting for camera…' }));
+    } else {
+      box.replaceChildren(...options.map((option) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.value = option.value;
+        button.textContent = option.text;
+        if (option.title) button.title = option.title;
+        button.addEventListener('click', () => {
+          if (select.value === option.value) return;
+          select.value = option.value;
+          select.dispatchEvent(new Event('change'));
+          syncLensButtons();
+        });
+        return button;
+      }));
+    }
+  }
+  for (const button of box.querySelectorAll<HTMLButtonElement>('button')) {
+    const active = button.dataset.value === select.value;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+    button.disabled = select.disabled;
   }
 }
 
@@ -660,10 +714,23 @@ async function renderNetwork(network: NetworkSnapshot): Promise<void> {
   renderedNetworkSignature = signature;
   latestNetwork = network;
   const generation = ++networkRenderGeneration;
+  // USB first: a pill says whether the cable is seen, and the chapter bar marks the step you are on
+  const usbFound = network.usb.length > 0;
+  setStatePill('usb-state', usbFound, usbFound ? 'Detected' : 'Not detected');
+  setStatePill('wifi-state', network.wifi.length > 0, network.wifi[0]?.name || 'No network');
+  $('usb-steps').innerHTML = stepsBar(['Cable', 'Hotspot', 'Scan', 'Trust'], usbFound ? 2 : 0);
   await Promise.all([
     renderEndpoints('usb-endpoints', network.usb, 'No Apple USB interface detected. Connect the cable and enable Personal Hotspot.', generation),
     renderEndpoints('wifi-endpoints', network.wifi, 'No private LAN interface detected. Connect this PC to Wi-Fi or Ethernet.', generation),
   ]);
+}
+
+function setStatePill(id: string, on: boolean, text: string): void {
+  const pill = $(id);
+  pill.querySelector('.dot')?.classList.toggle('ok', on);
+  const label = pill.querySelector('span:last-child');
+  if (label) label.textContent = text;
+  pill.title = text;
 }
 
 async function renderEndpoints(id: string, endpoints: NetworkEndpoint[], empty: string, generation: number): Promise<void> {
@@ -690,7 +757,7 @@ async function renderEndpoints(id: string, endpoints: NetworkEndpoint[], empty: 
     interfaceName.textContent = endpoint.name;
     const copy = document.createElement('button');
     copy.type = 'button';
-    copy.className = 'copy-button';
+    copy.className = 'copy-button secondary-button small-button with-icon ico-copy';
     copy.textContent = 'Copy URL';
     copy.addEventListener('click', () => void copyText(url, 'Sender URL'));
     info.append(code, interfaceName, copy);
@@ -714,8 +781,8 @@ function linkDownWarning(): HTMLElement {
   text.textContent = 'Windows shows the USB network as connected, but nothing comes back from the iPhone, so the page cannot load. On the iPhone:';
   const steps = document.createElement('ol');
   for (const step of [
-    'Settings → Personal Hotspot: turn "Allow Others to Join" off and on again, and keep that screen open.',
-    'Unplug and replug the cable; unlock the iPhone and tap "Trust" if asked.',
+    'Settings → Personal Hotspot: turn “Allow Others to Join” off and on again, and keep that screen open.',
+    'Unplug and replug the cable; unlock the iPhone and tap “Trust” if asked.',
     'The status bar should show the hotspot indicator (link icon / green pill). This warning disappears within a few seconds.',
   ]) {
     const item = document.createElement('li');
@@ -731,7 +798,7 @@ function firewallWarning(endpoint: NetworkEndpoint): HTMLElement {
   const box = document.createElement('div');
   box.className = 'firewall-warning';
   const title = document.createElement('strong');
-  title.textContent = `⚠ Windows Firewall will block the iPhone on "${endpoint.name}"`;
+  title.textContent = `⚠ Windows Firewall will block the iPhone on “${endpoint.name}”`;
   const text = document.createElement('p');
   text.textContent = 'Windows classifies this network as Public, and Node.js is only allowed on Private networks, so the page never loads on the iPhone. '
     + 'Run this once in PowerShell as administrator (it only opens this port to this USB subnet):';
@@ -739,16 +806,17 @@ function firewallWarning(endpoint: NetworkEndpoint): HTMLElement {
   command.textContent = endpoint.firewallFix || '';
   const copy = document.createElement('button');
   copy.type = 'button';
-  copy.className = 'copy-button';
+  copy.className = 'copy-button secondary-button small-button with-icon ico-copy';
   copy.textContent = 'Copy command';
   copy.addEventListener('click', () => void copyText(endpoint.firewallFix || '', 'Firewall command'));
   const alternative = document.createElement('small');
-  alternative.textContent = `Alternative: Settings → Network & internet → Ethernet → "${endpoint.name}" → Network profile type → Private.`;
+  alternative.textContent = `Alternative: Settings → Network & internet → Ethernet → “${endpoint.name}” → Network profile type → Private.`;
   box.append(title, text, command, copy, alternative);
   return box;
 }
 
 setOnline(false);
+watchRanges();
 void refreshNetwork();
 scheduleNetworkPoll();
 window.setTimeout(() => { if (!phoneOnline) openConnection(); }, 1100);

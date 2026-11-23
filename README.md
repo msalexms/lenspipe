@@ -1,18 +1,13 @@
 # iPhone Camera Link
 
-<sub>An open-source project by **[AMS] AMSTech**.</sub>
+<sub>**An AMSTech project** · Open source · MIT</sub>
 
 Use your iPhone as a low-latency studio camera on your PC and in OBS, over a USB cable or Wi-Fi. It runs entirely on your own network with **WebCodecs and binary WebSockets**: no app to install on the iPhone, no cloud relay, no account, no WebRTC, no UI framework and no browser extension.
-
-<!--
-  Screenshots: run `npm run screenshots` (with the server running) to regenerate docs/screenshots/,
-  then uncomment this block. The script replaces this PC's address and pairing key with demo values.
 
 <p align="center">
   <img src="docs/screenshots/control-desktop.png" alt="PC studio with live preview, telemetry and remote camera controls" width="720">
   <img src="docs/screenshots/sender-controls-mobile.png" alt="iPhone sender with lens, torch, mic and OLED-off controls" width="220">
 </p>
--->
 
 - Fastify HTTPS server with automatic first-run certificate generation
 - Separate, continuously refreshed USB tethering and Wi-Fi/LAN URLs + QR codes
@@ -207,9 +202,11 @@ The decoder regression test verifies fatal-error reconfiguration, dropped-delta 
 
 ## Design
 
-The interface uses a «datasheet» style: white sheets on off-white paper (`#f4f3ef`), thin grey rules (`#d9d7cf`), ink text (`#1a1a18`), nearly square corners and **JetBrains Mono** throughout. Section labels are small uppercase captions, and states are plain text (ON / OFF): there are no pills, coloured tiles or emoji. The camera buttons on the iPhone use thin monochrome line icons. Every token and shared component lives in `src/shared.css`. The icons are CSS masks, so buttons whose text the code rewrites keep their icon.
+The interface follows the AMSTech brand (manual v1.5, «stickers only»): cream paper (`#FFF6E9`), white boxes with a 2.5 px ink border (`#1E1B2E`), hard shadows and 6 px corners, one blue primary button per screen (`#2B36D9`) and yellow (`#FFE27A`) for what is selected and for warnings. Titles use **Bricolage Grotesque**, text **Figtree** and figures **DM Mono**. The head of Thor is the logo and the blue camera is this project's sticker; Thor's ears only appear on the USB steps bar of the connection dialog. Switches and segmented buttons show state (the hidden ON / OFF text is kept for screen readers), sliders fill in blue up to their value, the stream summary is a small data grid (cajetín), and the camera buttons on the iPhone are boxed keys with line icons. The interface is always light.
 
-The font is bundled from `@fontsource/jetbrains-mono` (SIL Open Font License) rather than loaded from a CDN, so the app still works offline.
+Colours, fonts and shapes come from the shared AMSTech package in `src/amstech-ui/` (tokens, components and fonts; replace the folder to update it). What is specific to this app lives in `src/shared.css`, `src/control.css` and `src/sender.css`; `src/amstech-ui.ts` paints the sliders and draws the steps bar. The icons are CSS masks, so buttons whose text the code rewrites keep their icon.
+
+The fonts are bundled by Vite from `src/amstech-ui/fuentes/` (SIL Open Font License, licences alongside) rather than loaded from a CDN, so the app still works offline under the same-origin Content Security Policy.
 
 ## Project layout
 
