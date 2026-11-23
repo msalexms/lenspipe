@@ -4,19 +4,23 @@ import { pairingToken, rememberPairingToken, withPairingToken } from '../pairing
 import type { ControlMessage } from '../protocol';
 import { HealthBanner, HealthMonitor } from '../health';
 import {
+  DEFAULT_SETTINGS,
   PHOTO_MODE_WARNING,
   PRESETS,
   presetSize,
   PROFILES,
+  aspectLabel,
+  codecName,
   describeSettings,
   formatTrackMode,
   matchingProfile,
   type ProfileName,
   type StreamSettings,
 } from '../stream-settings';
+import { paintRanges, stepsBar, watchRanges } from '../amstech-ui';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
-type NetworkEndpoint = { name: string; address: string; url: string; networkCategory?: string; firewallFix?: string; linkDown?: boolean };
+type NetworkEndpoint = { name: string; address: string; transport?: 'USB' | 'Wi-Fi'; url: string; networkCategory?: string; firewallFix?: string; linkDown?: boolean };
 type NetworkSnapshot = { usb: NetworkEndpoint[]; wifi: NetworkEndpoint[]; updatedAt: number };
 type SenderSettings = {
   orientation: 'landscape' | 'portrait';
@@ -70,7 +74,7 @@ const previousCounts = { networkDrops: 0, encoderDrops: 0, receiverDrops: 0, rel
 const health = new HealthMonitor();
 const healthBanner = new HealthBanner((changes) => {
   setEncoding(changes);
-  toast('Sent to the iPhone');
+  toast('Sent to the phone');
 });
 
 function delta(key: keyof typeof previousCounts, total: number): number {
@@ -93,7 +97,7 @@ function updateHealth(server: ControlMessage): void {
   const stalled = silenceMs > 2500;
   if (stalled && server.online) {
     $('metric-fps-value').textContent = '—';
-    $('metric-queue').textContent = `no iPhone data for ${(silenceMs / 1000).toFixed(1)} s`;
+    $('metric-queue').textContent = `no phone data for ${(silenceMs / 1000).toFixed(1)} s`;
   }
   healthBanner.show(health.update(online ? {
     settings: latestSettings!,
@@ -136,7 +140,7 @@ function setOnline(online: boolean): void {
   phoneOnline = online;
   $('waiting').classList.toggle('hidden', online);
   const statusChip = $('connection-status');
-  const statusText = online ? 'iPhone connected' : 'Waiting for iPhone';
+  const statusText = online ? 'Phone connected' : 'Waiting for phone…';
   statusChip.classList.toggle('online', online);
   statusChip.title = statusText;
   const dot = document.createElement('i');
@@ -151,6 +155,7 @@ function setOnline(online: boolean): void {
   for (const id of onlineControls) {
     $<HTMLSelectElement | HTMLButtonElement | HTMLInputElement>(id).disabled = !online;
   }
+  syncLensButtons();
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-profile]')) {
     button.disabled = !online;
     if (!online) button.classList.remove('active');
@@ -173,8 +178,8 @@ function setOnline(online: boolean): void {
     $('metric-rtt').textContent = '— ms';
     $('metric-queue').textContent = 'decoder queue 0';
     $('encoder-mode').textContent = 'Encoder idle';
-    $('settings-encoder-status').textContent = 'Connect an iPhone to apply settings.';
-    $<HTMLElement>('remote-audio-level').style.width = '0%';
+    $('settings-encoder-status').textContent = 'Connect a phone to apply settings.';
+    $<HTMLElement>('remote-audio-level').style.setProperty('--level', '0');
     $('remote-audio-db').textContent = '−∞ dB';
     renderAudioStatus();
   }
@@ -216,7 +221,7 @@ receiver.addEventListener('sender-telemetry', (event) => {
   if (data.width && data.height) $('preview-resolution').textContent = `${data.width} × ${data.height}`;
   const db = typeof data.audioDb === 'number' && Number.isFinite(data.audioDb) ? data.audioDb : null;
   const levelPct = db === null ? 0 : Math.max(0, Math.min(100, Math.pow(10, db / 20) * 100));
-  $<HTMLElement>('remote-audio-level').style.width = `${levelPct}%`;
+  $<HTMLElement>('remote-audio-level').style.setProperty('--level', String(levelPct / 100));
   $('remote-audio-db').textContent = db === null ? '−∞ dB' : `${db.toFixed(1)} dB`;
 });
 receiver.addEventListener('local-telemetry', (event) => {
@@ -258,8 +263,8 @@ receiver.addEventListener('sender-focus', (event) => {
   // Only explain results for clicks made here (the iPhone shows its own messages for its own taps).
   if (performance.now() - lastFocusAt > 3000) return;
   if (result === 'locked') toast('Focus is locked: set Focus to Continuous in Settings');
-  else if (result === 'unsupported') toast('Safari does not expose focus control on this iPhone');
-  else if (result === 'refocus') toast('Refocusing (Safari only allows a full-frame autofocus pass)');
+  else if (result === 'unsupported') toast('This browser does not expose focus control on this lens');
+  else if (result === 'refocus') toast('Refocusing (this browser only allows a full-frame autofocus pass)');
 });
 // Microphone problems reported by the iPhone (permission denied, needs a tap, busy) are shown here too,
 // otherwise turning the mic on from the studio would just silently stay off.
@@ -283,11 +288,11 @@ function renderAudioStatus(): void {
   let text: string;
   let level: 'idle' | 'ok' | 'warn';
   if (micProblem) {
-    [text, level] = [micProblem.startsWith('Tap') ? 'Tap the iPhone screen to start its mic' : 'iPhone mic blocked: see message on the iPhone', 'warn'];
+    [text, level] = [micProblem.startsWith('Tap') ? 'Tap the phone screen to start its mic' : 'Phone mic blocked: see message on the phone', 'warn'];
   } else if (!senderMicEnabled) {
-    [text, level] = ['iPhone mic off', 'idle'];
+    [text, level] = ['Phone mic off', 'idle'];
   } else if (senderMuted) {
-    [text, level] = ['iPhone mic muted', 'idle'];
+    [text, level] = ['Phone mic muted', 'idle'];
   } else if (!lastAudio || lastAudio.chunksPerSecond === 0) {
     [text, level] = ['Mic on, but no audio is arriving', 'warn'];
   } else if (audioEnabled && lastAudio.state === 'suspended') {
@@ -333,7 +338,7 @@ function applySenderState(message: ControlMessage): void {
   const settings = message.settings as SenderSettings | undefined;
   if (!settings) return;
   const lenses = (message.lenses || []) as Lens[];
-  const lensKey = lenses.map((lens) => lens.deviceId).join('|');
+  const lensKey = lenses.map((lens) => `${lens.deviceId}:${lens.label}`).join('|');
   const lensSelect = $<HTMLSelectElement>('remote-lens');
   if (lensKey !== latestLensesKey) {
     latestLensesKey = lensKey;
@@ -345,6 +350,7 @@ function applySenderState(message: ControlMessage): void {
   }
   lensSelect.value = settings.selectedLens;
   lensSelect.disabled = !phoneOnline || lenses.length === 0;
+  syncLensButtons();
   const isLandscape = settings.orientation === 'landscape';
   $('landscape').classList.toggle('active', isLandscape);
   $('landscape').setAttribute('aria-pressed', String(isLandscape));
@@ -355,7 +361,7 @@ function applySenderState(message: ControlMessage): void {
   const photoMode = Boolean(PRESETS[settings.preset as keyof typeof PRESETS]?.photoMode);
   const photoNote = $('remote-photo-mode-note');
   photoNote.hidden = !photoMode;
-  photoNote.textContent = `${PHOTO_MODE_WARNING} 12 MP may be cropped to what the iPhone can encode, and needs a GPU that decodes level 6.0.`;
+  photoNote.textContent = `${PHOTO_MODE_WARNING} 12 MP may be cropped to what the phone can encode, and needs a GPU that decodes level 6.0.`;
   $('stream-summary-detail').classList.toggle('photo-mode-detail', photoMode);
   renderHoldBanner(phoneOnline ? settings.hold : 'ok', settings.orientation, Boolean(settings.turned), settings.preset);
   $<HTMLSelectElement>('remote-codec').value = settings.codec;
@@ -385,6 +391,7 @@ function applySenderState(message: ControlMessage): void {
   const summary = describeSettings(latestSettings);
   $('stream-summary').textContent = summary.title;
   $('stream-summary-detail').textContent = summary.detail;
+  renderStreamSummary(latestSettings);
   const status = settings.encoderStatus || (settings.bitrateMode === 'constant' ? 'CBR active' : 'VBR active');
   $('encoder-mode').textContent = status;
   $('settings-encoder-status').textContent = status;
@@ -410,7 +417,7 @@ function applySenderState(message: ControlMessage): void {
   micSelect.value = settings.selectedMicrophone || '';
   micSelect.disabled = !phoneOnline || !settings.micEnabled;
   if (!settings.micEnabled) {
-    $<HTMLElement>('remote-audio-level').style.width = '0%';
+    $<HTMLElement>('remote-audio-level').style.setProperty('--level', '0');
     $('remote-audio-db').textContent = '−∞ dB';
   }
 
@@ -437,6 +444,55 @@ function applySenderState(message: ControlMessage): void {
     const ev = settings.exposureEv;
     evInput.value = String(ev);
     $('ev-value').textContent = `${ev > 0 ? '+' : ''}${ev.toFixed(1)} EV`;
+  }
+  paintRanges();
+  if ($<HTMLDialogElement>('obs-modal').open) updateObsModal();
+}
+
+/** The stream box of the side panel: the current settings as a cajetín (format, codec, bitrate, rate · mode). */
+function renderStreamSummary(settings: StreamSettings): void {
+  $('sum-format').textContent = `${PRESETS[settings.preset].label} · ${aspectLabel(settings)}`;
+  $('sum-codec').textContent = codecName(settings.codec);
+  $('sum-bitrate').textContent = `${Math.round(settings.bitrate / 1_000_000)} Mbps`;
+  $('sum-mode').textContent = `${settings.bitrateMode === 'variable' ? 'VBR' : 'CBR'} · ${settings.latencyMode === 'quality' ? 'quality' : 'realtime'}`;
+}
+
+/**
+ * Lens as segmented buttons, like the iPhone. The hidden <select> stays the source of truth: the buttons set its
+ * value and fire its change event, so the command code is the same.
+ */
+let lensButtonsKey: string | null = null;
+function syncLensButtons(): void {
+  const select = $<HTMLSelectElement>('remote-lens');
+  const box = $('remote-lens-buttons');
+  const options = latestLensesKey ? [...select.options] : [];
+  const key = options.map((option) => `${option.value}:${option.text}`).join('|');
+  if (key !== lensButtonsKey) {
+    lensButtonsKey = key;
+    if (!options.length) {
+      box.replaceChildren(Object.assign(document.createElement('span'), { className: 'segments-empty', textContent: 'Waiting for camera…' }));
+    } else {
+      box.replaceChildren(...options.map((option) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.value = option.value;
+        button.textContent = option.text;
+        if (option.title) button.title = option.title;
+        button.addEventListener('click', () => {
+          if (select.value === option.value) return;
+          select.value = option.value;
+          select.dispatchEvent(new Event('change'));
+          syncLensButtons();
+        });
+        return button;
+      }));
+    }
+  }
+  for (const button of box.querySelectorAll<HTMLButtonElement>('button')) {
+    const active = button.dataset.value === select.value;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+    button.disabled = select.disabled;
   }
 }
 
@@ -468,14 +524,14 @@ function renderHoldBanner(hold: SenderSettings['hold'], orientation: 'landscape'
   const landscape = orientation === 'landscape';
   if (hold === 'upside-down') {
     $('hold-banner-title').textContent = 'The picture is upside down';
-    $('hold-banner-detail').textContent = 'Turn the iPhone round, or rotate the picture.';
+    $('hold-banner-detail').textContent = 'Turn the phone round, or rotate the picture.';
     $('hold-banner-action').textContent = 'Rotate 180°';
     holdFix = { command: 'set-encoding', settings: { turned: !turned } };
   } else {
-    $('hold-banner-title').textContent = landscape ? 'Turn the iPhone sideways' : 'Turn the iPhone upright';
+    $('hold-banner-title').textContent = landscape ? 'Turn the phone sideways' : 'Turn the phone upright';
     const ratio = (PRESETS[preset as keyof typeof PRESETS] ?? PRESETS['4k30']).ratio;
     const [here, there] = landscape ? [ratio, ratio.split(':').reverse().join(':')] : [ratio.split(':').reverse().join(':'), ratio];
-    $('hold-banner-detail').textContent = `The stream is ${here} but the iPhone is ${landscape ? 'upright' : 'sideways'}, so the picture arrives on its side. If it is not, turn off Rotation Lock on the iPhone.`;
+    $('hold-banner-detail').textContent = `The stream is ${here} but the phone is ${landscape ? 'upright' : 'sideways'}, so the picture arrives on its side. If it is not, turn off Rotation Lock on the phone.`;
     $('hold-banner-action').textContent = `Use ${there}`;
     holdFix = { command: 'set-orientation', orientation: landscape ? 'portrait' : 'landscape' };
   }
@@ -527,7 +583,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-profile
     if (!profile) return;
     setEncoding(profile.settings);
     $<HTMLDialogElement>('settings-modal').close();
-    toast(`${profile.label} profile sent to the iPhone`);
+    toast(`${profile.label} profile sent to the phone`);
   });
 }
 function enableBackdropClose(dialog: HTMLDialogElement): void {
@@ -541,9 +597,14 @@ function enableBackdropClose(dialog: HTMLDialogElement): void {
 }
 enableBackdropClose($<HTMLDialogElement>('settings-modal'));
 enableBackdropClose($<HTMLDialogElement>('connection-modal'));
+enableBackdropClose($<HTMLDialogElement>('about-modal'));
+enableBackdropClose($<HTMLDialogElement>('obs-modal'));
 const openSettings = () => $<HTMLDialogElement>('settings-modal').showModal();
+const openAbout = () => $<HTMLDialogElement>('about-modal').showModal();
 $('open-settings').addEventListener('click', openSettings);
 $('header-settings').addEventListener('click', openSettings);
+$('header-about').addEventListener('click', openAbout);
+$('footer-about').addEventListener('click', openAbout);
 const bitrateInput = $<HTMLInputElement>('remote-bitrate');
 bitrateInput.addEventListener('pointerdown', () => { draggingBitrate = true; });
 bitrateInput.addEventListener('input', () => {
@@ -615,11 +676,103 @@ $('audio-monitor').addEventListener('click', () => {
   renderAudioStatus();
 });
 receiver.setAudioMuted(true);
+type ObsOs = 'win32' | 'darwin' | 'linux';
+function detectBrowserOs(): ObsOs {
+  const ua = navigator.userAgent;
+  if (/Mac/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua)) return 'darwin';
+  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return 'linux';
+  return 'win32';
+}
+let localCertPath = '';
+let serverPlatform = '';
+let obsOs: ObsOs = detectBrowserOs();
+let obsOsManual = false;
+
+function obsUrl(): string {
+  return withPairingToken(`${location.origin}/obs`);
+}
+
+function psQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function obsCertPathFor(os: ObsOs): string {
+  if (localCertPath && os === serverPlatform) return localCertPath;
+  return os === 'win32' ? '.\\certs\\local-cert.pem' : './certs/local-cert.pem';
+}
+
+function renderObsCertGuide(): void {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-obs-os]')) {
+    const active = button.dataset.obsOs === obsOs;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  }
+  const path = obsCertPathFor(obsOs);
+  const usingAbsolute = Boolean(localCertPath && obsOs === serverPlatform);
+  const intro = $('obs-cert-intro');
+  const cmd = $('obs-cert-cmd');
+  const note = $('obs-cert-note');
+  if (obsOs === 'darwin') {
+    intro.textContent = 'Run once in Terminal (adds the local CA to the System Keychain), then fully quit (Cmd + Q) and reopen OBS:';
+    cmd.textContent = `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ${shQuote(path)}`;
+    note.textContent = 'GUI alternative: double-click local-cert.pem in Finder to open Keychain Access, set Trust → Always Trust, then restart OBS.';
+  } else if (obsOs === 'linux') {
+    intro.textContent = 'OBS Browser Source uses Chromium NSS. Install libnss3-tools (Debian/Ubuntu) or nss-tools (Fedora/Arch), run once, then restart OBS:';
+    cmd.textContent = `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "LensPipe" -i ${shQuote(path)}`;
+    note.textContent = 'If ~/.pki/nssdb doesn\'t exist yet, create it with: mkdir -p ~/.pki/nssdb && certutil -d sql:$HOME/.pki/nssdb -N --empty-password. For Flatpak OBS, add local-cert.pem to the system CA store (update-ca-certificates / update-ca-trust).';
+  } else {
+    intro.textContent = usingAbsolute
+      ? 'Run once in PowerShell (from any folder), confirm the Windows prompt, then restart OBS completely:'
+      : 'Run in PowerShell from the LensPipe folder, confirm the prompt, then restart OBS completely:';
+    cmd.textContent = `Import-Certificate -FilePath ${psQuote(path)} -CertStoreLocation Cert:\\CurrentUser\\Root`;
+    note.textContent = 'Installs into CurrentUser\\Root (no admin needed). Only trust a certificate generated on your own PC.';
+  }
+}
+
+function updateObsModal(): void {
+  $('obs-url').textContent = obsUrl();
+  const localHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
+  const lanBase = latestNetwork.wifi[0]?.url;
+  if (localHost) {
+    $('obs-url-hint').textContent = lanBase
+      ? `Use this URL when OBS runs on this PC (no pairing key needed). From another PC on the same LAN, use ${withPairingToken(`${lanBase}/obs`)}.`
+      : 'Use this URL when OBS runs on this PC (no pairing key needed here).';
+  } else {
+    $('obs-url-hint').textContent = 'Includes the pairing key (#k=…) required by OBS on another device.';
+  }
+  const activePreset = latestSettings ? PRESETS[latestSettings.preset] : PRESETS[DEFAULT_SETTINGS.preset];
+  const activeOrientation = latestSettings?.orientation ?? DEFAULT_SETTINGS.orientation;
+  const size = presetSize(activePreset, activeOrientation);
+  $('obs-size-hint').textContent = `${size.width} × ${size.height}`;
+  renderObsCertGuide();
+}
+
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-obs-os]')) {
+  button.addEventListener('click', () => {
+    const os = button.dataset.obsOs;
+    if (os !== 'win32' && os !== 'darwin' && os !== 'linux') return;
+    obsOs = os;
+    obsOsManual = true;
+    renderObsCertGuide();
+  });
+}
+
 $('open-obs').addEventListener('click', (event) => {
-  if (event.shiftKey) window.open('/obs', '_blank');
-  else void copyText(withPairingToken(`${location.origin}/obs`), 'OBS browser source URL');
+  if (event.shiftKey) {
+    window.open('/obs', '_blank');
+    return;
+  }
+  updateObsModal();
+  $<HTMLDialogElement>('obs-modal').showModal();
 });
-$('open-obs').title = 'Click to copy the OBS URL. Shift-click to open it.';
+$('open-obs').title = 'Show OBS Studio setup guide and URL. Shift-click to open /obs directly.';
+$('obs-copy-url').addEventListener('click', () => void copyText(obsUrl(), 'OBS browser source URL'));
+$('obs-open-preview').addEventListener('click', () => window.open('/obs', '_blank'));
+$('obs-copy-cert').addEventListener('click', () => void copyText($('obs-cert-cmd').textContent || '', 'Certificate command'));
 $('show-connection').addEventListener('click', openConnection);
 $('waiting-connect').addEventListener('click', openConnection);
 function openConnection(): void {
@@ -645,9 +798,15 @@ async function refreshNetwork(): Promise<void> {
     const token = pairingToken();
     const response = await fetch('/api/network', { cache: 'no-store', headers: token ? { 'x-pairing-key': token } : {} });
     if (!response.ok) return;
-    const network = await response.json() as NetworkSnapshot & { pairingToken?: string };
+    const network = await response.json() as NetworkSnapshot & { pairingToken?: string; certPath?: string; platform?: string };
     if (network.pairingToken) rememberPairingToken(network.pairingToken);
+    if (network.certPath) localCertPath = network.certPath;
+    if (network.platform === 'win32' || network.platform === 'darwin' || network.platform === 'linux') {
+      serverPlatform = network.platform;
+      if (!obsOsManual) obsOs = network.platform;
+    }
     await renderNetwork(network);
+    if ($<HTMLDialogElement>('obs-modal').open) renderObsCertGuide();
   } catch {
     // The next poll retries; video/control traffic is unaffected.
   }
@@ -660,10 +819,24 @@ async function renderNetwork(network: NetworkSnapshot): Promise<void> {
   renderedNetworkSignature = signature;
   latestNetwork = network;
   const generation = ++networkRenderGeneration;
+  // USB first: a pill says whether the cable is seen, and the chapter bar marks the step you are on
+  const usbFound = network.usb.length > 0;
+  setStatePill('usb-state', usbFound, usbFound ? 'Detected' : 'Not detected');
+  setStatePill('wifi-state', network.wifi.length > 0, network.wifi.length > 0 ? 'Ready' : 'No network');
+  $('usb-steps').innerHTML = stepsBar(['Cable', 'Tethering', 'Scan', 'Trust'], usbFound ? 2 : 0);
   await Promise.all([
-    renderEndpoints('usb-endpoints', network.usb, 'No Apple USB interface detected. Connect the cable and enable Personal Hotspot.', generation),
+    renderEndpoints('usb-endpoints', network.usb, 'No phone USB interface detected. Connect the cable and enable Personal Hotspot (iPhone) or USB tethering (Android).', generation),
     renderEndpoints('wifi-endpoints', network.wifi, 'No private LAN interface detected. Connect this PC to Wi-Fi or Ethernet.', generation),
   ]);
+  if ($<HTMLDialogElement>('obs-modal').open) updateObsModal();
+}
+
+function setStatePill(id: string, on: boolean, text: string): void {
+  const pill = $(id);
+  pill.querySelector('.dot')?.classList.toggle('ok', on);
+  const label = pill.querySelector('span:last-child');
+  if (label) label.textContent = text;
+  pill.title = text;
 }
 
 async function renderEndpoints(id: string, endpoints: NetworkEndpoint[], empty: string, generation: number): Promise<void> {
@@ -687,10 +860,11 @@ async function renderEndpoints(id: string, endpoints: NetworkEndpoint[], empty: 
     const code = document.createElement('code');
     code.textContent = url;
     const interfaceName = document.createElement('small');
-    interfaceName.textContent = endpoint.name;
+    const isLan = id === 'wifi-endpoints' || endpoint.transport === 'Wi-Fi';
+    interfaceName.textContent = isLan ? `PC network: ${endpoint.name}` : endpoint.name;
     const copy = document.createElement('button');
     copy.type = 'button';
-    copy.className = 'copy-button';
+    copy.className = 'copy-button secondary-button small-button with-icon ico-copy';
     copy.textContent = 'Copy URL';
     copy.addEventListener('click', () => void copyText(url, 'Sender URL'));
     info.append(code, interfaceName, copy);
@@ -709,13 +883,13 @@ function linkDownWarning(): HTMLElement {
   const box = document.createElement('div');
   box.className = 'firewall-warning';
   const title = document.createElement('strong');
-  title.textContent = '⚠ The iPhone is not answering over the cable';
+  title.textContent = '⚠ The phone is not answering over the cable';
   const text = document.createElement('p');
-  text.textContent = 'Windows shows the USB network as connected, but nothing comes back from the iPhone, so the page cannot load. On the iPhone:';
+  text.textContent = 'Windows shows the USB network as connected, but nothing comes back from the phone, so the page cannot load. On iPhone:';
   const steps = document.createElement('ol');
   for (const step of [
-    'Settings → Personal Hotspot: turn "Allow Others to Join" off and on again, and keep that screen open.',
-    'Unplug and replug the cable; unlock the iPhone and tap "Trust" if asked.',
+    'Settings → Personal Hotspot: turn “Allow Others to Join” off and on again, and keep that screen open.',
+    'Unplug and replug the cable; unlock the phone and tap “Trust” if asked.',
     'The status bar should show the hotspot indicator (link icon / green pill). This warning disappears within a few seconds.',
   ]) {
     const item = document.createElement('li');
@@ -726,29 +900,30 @@ function linkDownWarning(): HTMLElement {
   return box;
 }
 
-/** Windows puts new iPhone USB networks on the Public profile, where Node's firewall rule doesn't apply. */
+/** Windows puts new phone USB networks on the Public profile, where Node's firewall rule doesn't apply. */
 function firewallWarning(endpoint: NetworkEndpoint): HTMLElement {
   const box = document.createElement('div');
   box.className = 'firewall-warning';
   const title = document.createElement('strong');
-  title.textContent = `⚠ Windows Firewall will block the iPhone on "${endpoint.name}"`;
+  title.textContent = `⚠ Windows Firewall will block the phone on “${endpoint.name}”`;
   const text = document.createElement('p');
-  text.textContent = 'Windows classifies this network as Public, and Node.js is only allowed on Private networks, so the page never loads on the iPhone. '
+  text.textContent = 'Windows classifies this network as Public, and Node.js is only allowed on Private networks, so the page never loads on the phone. '
     + 'Run this once in PowerShell as administrator (it only opens this port to this USB subnet):';
   const command = document.createElement('code');
   command.textContent = endpoint.firewallFix || '';
   const copy = document.createElement('button');
   copy.type = 'button';
-  copy.className = 'copy-button';
+  copy.className = 'copy-button secondary-button small-button with-icon ico-copy';
   copy.textContent = 'Copy command';
   copy.addEventListener('click', () => void copyText(endpoint.firewallFix || '', 'Firewall command'));
   const alternative = document.createElement('small');
-  alternative.textContent = `Alternative: Settings → Network & internet → Ethernet → "${endpoint.name}" → Network profile type → Private.`;
+  alternative.textContent = `Alternative: Settings → Network & internet → Ethernet → “${endpoint.name}” → Network profile type → Private.`;
   box.append(title, text, command, copy, alternative);
   return box;
 }
 
 setOnline(false);
+watchRanges();
 void refreshNetwork();
 scheduleNetworkPoll();
 window.setTimeout(() => { if (!phoneOnline) openConnection(); }, 1100);

@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-tema="claro">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#fbfaf7" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%231a1a18'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23f4f3ef' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%232d6a3e'/%3E%3C/svg%3E" />
-    <title>Camera Link · Sender</title>
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>LensPipe · Sender</title>
     <link rel="stylesheet" href="/src/sender.css" />
   </head>
   <body>
     <main class="sender-shell">
       <header class="sender-header">
-        <div class="brand logo"><span class="live-dot" aria-hidden="true"></span>camera link</div>
+        <div class="brand logo" translate="no"><svg class="thor" width="26" height="26" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>lenspipe<span class="live-dot dot" aria-hidden="true"></span></div>
         <div class="telemetry-pill">
           <strong id="transport">—</strong><span id="bitrate-live">0 Mbps</span><span id="resolution-live">—</span><span id="fps-live">0 FPS</span><span id="queue-live">Q0</span>
         </div>
@@ -20,29 +20,29 @@
 
       <div id="health-banner" class="health-banner" role="status" hidden>
         <div><strong id="health-title"></strong><small id="health-detail"></small></div>
-        <button id="health-action" type="button"></button>
+        <button id="health-action" type="button" class="primary-button"></button>
         <button id="health-dismiss" type="button" aria-label="Dismiss warning">×</button>
       </div>
 
       <section class="camera-controls">
-        <div id="lens-buttons" class="lens-buttons" aria-label="Camera lens"></div>
+        <div id="lens-buttons" class="lens-buttons" role="group" aria-label="Camera lens"></div>
         <div class="primary-actions">
           <button id="orientation" type="button" class="glass-button with-icon ico-aspect" title="Switch aspect ratio">16:9</button>
-          <button id="turn" type="button" class="glass-button with-icon ico-rotate" title="Turn the picture over (iPhone mounted upside down)" aria-pressed="false">Rotate 180°</button>
+          <button id="turn" type="button" class="glass-button with-icon ico-rotate" title="Turn the picture over (phone mounted upside down)" aria-pressed="false">Rotate 180°</button>
           <button id="torch" type="button" class="glass-button with-icon ico-torch" title="Toggle torch" aria-pressed="false" disabled>Torch</button>
-          <button id="mic" type="button" class="glass-button with-icon ico-mic" title="Enable iPhone microphone" aria-pressed="false">Mic off</button>
+          <button id="mic" type="button" class="glass-button with-icon ico-mic" title="Enable phone microphone" aria-pressed="false">Mic off</button>
           <button id="mute" type="button" class="glass-button with-icon ico-mute" title="Mute microphone" aria-pressed="false" disabled>Mute</button>
           <button id="blackout" type="button" class="blackout-button with-icon ico-moon" title="Turn the OLED screen black">OLED off</button>
           <button id="open-settings" type="button" class="glass-button with-icon ico-sliders settings-button" title="Stream settings" aria-haspopup="dialog">Settings</button>
         </div>
-        <label class="zoom-control"><span id="zoom-label">1.0×</span><input id="zoom" type="range" min="1" max="3" step="0.1" value="1" disabled /></label>
+        <label class="zoom-control"><span id="zoom-label">1.0×</span><input id="zoom" type="range" min="1" max="3" step="0.1" value="1" aria-label="Zoom" disabled /></label>
       </section>
 
       <dialog id="settings-sheet" class="settings-sheet" aria-labelledby="settings-title">
         <form method="dialog">
           <header class="sheet-header">
             <div><span class="eyebrow">Settings</span><h2 id="settings-title">Stream</h2><small id="settings-summary">—</small></div>
-            <button class="sheet-close" value="close" aria-label="Close settings">×</button>
+            <button class="sheet-close with-icon ico-x" value="close" aria-label="Close settings"></button>
           </header>
 
           <section class="sheet-section">
@@ -58,7 +58,7 @@
             <div class="group">
               <label class="row"><span class="row-label">Format</span><select id="preset"><optgroup label="16:9 · video modes"><option value="4k30" selected>4K · 30</option><option value="4k60">4K · 60</option><option value="1080p60">1080p · 60</option><option value="1080p30">1080p · 30</option></optgroup><optgroup label="4:3 · photo modes (less processing)"><option value="4x3-12mp30">12 MP · 30</option><option value="4x3-1440p30">1440p · 30</option><option value="4x3-1080p60">1080p · 60</option></optgroup></select></label>
               <label class="row"><span class="row-label">Codec</span><select id="codec"><option value="avc1.640032">H.264 High</option><option value="hvc1.1.6.L153.B0">HEVC</option></select></label>
-              <label class="row"><span class="row-label">Bitrate</span><select id="bitrate"><option value="20000000">20 Mbps</option><option value="30000000">30 Mbps</option><option value="40000000">40 Mbps</option><option value="50000000">50 Mbps</option><option value="60000000" selected>60 Mbps</option><option value="70000000">70 Mbps</option><option value="80000000">80 Mbps</option><option value="90000000">90 Mbps</option><option value="100000000">100 Mbps</option><option value="110000000">110 Mbps</option><option value="120000000">120 Mbps</option><option value="130000000">130 Mbps</option><option value="140000000">140 Mbps</option><option value="150000000">150 Mbps</option><option value="160000000">160 Mbps</option><option value="170000000">170 Mbps</option><option value="180000000">180 Mbps</option><option value="190000000">190 Mbps</option><option value="200000000">200 Mbps</option></select></label>
+              <label class="row"><span class="row-label">Bitrate</span><select id="bitrate"><option value="10000000">10 Mbps</option><option value="20000000">20 Mbps</option><option value="30000000">30 Mbps</option><option value="40000000">40 Mbps</option><option value="50000000">50 Mbps</option><option value="60000000" selected>60 Mbps</option><option value="70000000">70 Mbps</option><option value="80000000">80 Mbps</option><option value="90000000">90 Mbps</option><option value="100000000">100 Mbps</option><option value="110000000">110 Mbps</option><option value="120000000">120 Mbps</option><option value="130000000">130 Mbps</option><option value="140000000">140 Mbps</option><option value="150000000">150 Mbps</option><option value="160000000">160 Mbps</option><option value="170000000">170 Mbps</option><option value="180000000">180 Mbps</option><option value="190000000">190 Mbps</option><option value="200000000">200 Mbps</option></select></label>
               <label class="row"><span class="row-label">Rate control</span><select id="rate-control"><option value="variable">VBR</option><option value="constant">CBR</option></select></label>
               <label class="row"><span class="row-label">Encoder</span><select id="latency-mode"><option value="quality">Quality</option><option value="realtime">Realtime</option></select></label>
             </div>
@@ -90,18 +90,19 @@
       </dialog>
 
       <section id="start-screen" class="start-screen">
+        <svg class="sticker start-sticker" width="98" height="92" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
         <div class="start-card">
-          <span class="logo">camera link</span>
-          <h1>Your iPhone, your studio camera.</h1>
-          <p>Enable camera access, then keep this tab open. For USB, connect the cable and enable Personal Hotspot.</p>
+          <span class="logo" translate="no"><svg class="thor" width="28" height="28" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>lenspipe</span>
+          <h1>Your phone, your studio camera.</h1>
+          <p>Enable camera access, then keep this tab open. Works on iPhone and Android — for USB, connect the cable and enable Personal Hotspot or USB tethering.</p>
           <button id="start" class="primary-button">Start camera</button>
-          <small id="start-note">WebCodecs · direct local WebSocket · no cloud</small>
-          <small class="start-signature"><span class="signature">by <b>[AMS]</b> AMSTech</span></small>
+          <small id="start-note">WebCodecs · direct local WebSocket · iPhone &amp; Android · no cloud</small>
+          <small class="start-signature"><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · MIT</span></small>
         </div>
       </section>
       <div id="focus-ring" class="focus-ring" aria-hidden="true"></div>
       <div id="toast" role="status" aria-live="polite"></div>
-      <div id="blackout-overlay" aria-label="OLED blackout. Hold for two seconds to exit.">
+      <div id="blackout-overlay" role="dialog" aria-modal="true" aria-label="OLED blackout. Hold for two seconds, or press Escape, to exit.">
         <div id="hold-progress"></div>
         <span class="blackout-hint" aria-hidden="true">Hold 2s to wake</span>
       </div>

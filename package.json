@@ -1,11 +1,13 @@
 {
-  "name": "iphone-camera-link",
+  "name": "lenspipe",
   "version": "1.0.0",
-  "description": "Use an iPhone as a low-latency studio camera on your PC and in OBS, over USB or Wi-Fi. Local only: WebCodecs + WebSockets, no app, no cloud.",
+  "description": "Use your phone (iPhone or Android) as a low-latency studio camera on your PC and in OBS, over USB or Wi-Fi. Local only: WebCodecs + WebSockets, no app, no cloud.",
   "license": "MIT",
   "author": "AMSTech",
   "keywords": [
     "iphone",
+    "android",
+    "phone",
     "webcam",
     "obs",
     "webcodecs",
@@ -46,7 +48,6 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@fontsource/jetbrains-mono": "^5.3.0",
     "@types/dom-webcodecs": "^0.1.11",
     "@types/node": "^22.10.5",
     "@types/qrcode": "^1.5.5",

@@ -69,5 +69,6 @@ function stop(): void {
   reader = undefined;
   track?.stop();
   track = undefined;
+  scope.postMessage({ type: 'stopped' });
   scope.close();
 }
