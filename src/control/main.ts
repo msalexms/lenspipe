@@ -46,10 +46,26 @@ type SenderSettings = {
 };
 type Lens = { deviceId: string; label: string; detail: string };
 type Microphone = { deviceId: string; label: string };
+type ReceiverTelemetry = {
+  id: number;
+  label: string;
+  videoEnabled?: boolean;
+  queuedMs: number;
+  fps: number;
+  decoderQueue: number;
+  pipelineMs: number;
+  pipelineMaxMs: number;
+  relayDroppedFrames: number;
+};
 
 const receiver = new StreamReceiver($<HTMLCanvasElement>('preview'), '/ws/control');
+const PC_HEALTH_WARMUP_MS = 2500;
 let phoneOnline = false;
 let audioEnabled = false;
+let latestObs: ReceiverTelemetry | null = null;
+let streamStartedAt = 0;
+let localVideoResumedAt = 0;
+let obsConnectedAt = 0;
 let latestLensesKey = '';
 let latestMicsKey = '';
 let lastEncoderQueue = 0;
@@ -83,22 +99,126 @@ function delta(key: keyof typeof previousCounts, total: number): number {
   return value;
 }
 
+function summarizeObs(receivers: ReceiverTelemetry[]): {
+  count: number;
+  summary: ReceiverTelemetry;
+  latencyMs: number;
+} | null {
+  const obs = receivers.filter((entry) => entry.label === 'obs');
+  if (!obs.length) return null;
+  const active = obs.filter((entry) => entry.videoEnabled !== false);
+  const fps = active.length ? Math.min(...active.map((entry) => Number(entry.fps) || 0)) : 0;
+  const pipelineMs = active.length ? Math.max(...active.map((entry) => Number(entry.pipelineMs) || 0)) : 0;
+  const pipelineMaxMs = active.length ? Math.max(...active.map((entry) => Number(entry.pipelineMaxMs) || 0)) : 0;
+  const queuedMs = active.length ? Math.max(...active.map((entry) => Number(entry.queuedMs) || 0)) : 0;
+  const decoderQueue = active.length ? Math.max(...active.map((entry) => Number(entry.decoderQueue) || 0)) : 0;
+  const relayDroppedFrames = Math.max(0, ...obs.map((entry) => Number(entry.relayDroppedFrames) || 0));
+  return {
+    count: obs.length,
+    latencyMs: pipelineMs + queuedMs,
+    summary: {
+      id: obs[0].id,
+      label: 'obs',
+      videoEnabled: active.length > 0,
+      queuedMs,
+      fps,
+      decoderQueue,
+      pipelineMs,
+      pipelineMaxMs,
+      relayDroppedFrames,
+    },
+  };
+}
+
+function renderObsStatus(receivers: ReceiverTelemetry[]): ReceiverTelemetry | null {
+  const pill = $('obs-status-pill');
+  const text = $('obs-status-text');
+  const dot = pill.querySelector('.dot');
+  const result = summarizeObs(receivers);
+  if (!result) {
+    latestObs = null;
+    obsConnectedAt = 0;
+    pill.hidden = true;
+    pill.dataset.level = 'ok';
+    updateQueueMetric();
+    return null;
+  }
+  const now = performance.now();
+  if (obsConnectedAt === 0) obsConnectedAt = now;
+  const { count, summary, latencyMs } = result;
+  latestObs = summary;
+  const prefix = count > 1 ? `OBS ×${count}` : 'OBS';
+  const targetFps = latestSettings ? PRESETS[latestSettings.preset].frameRate : 0;
+  const senderFps = Number(latestSender?.fps) || 0;
+  const expectedFps = senderFps > 0 ? Math.min(targetFps || senderFps, senderFps) : targetFps;
+  const obsWarmingUp = now - Math.max(streamStartedAt, obsConnectedAt) < PC_HEALTH_WARMUP_MS;
+  const warn = phoneOnline && (
+    latencyMs > 35
+    || summary.decoderQueue >= 3
+    || (!obsWarmingUp && expectedFps >= 10 && summary.fps < expectedFps * 0.8)
+  );
+  pill.hidden = false;
+  pill.dataset.level = warn ? 'warn' : 'ok';
+  if (dot) dot.className = warn ? 'dot live' : 'dot ok';
+  text.textContent = phoneOnline ? `${prefix} · ${summary.fps} FPS · ${latencyMs} ms` : `${prefix} connected`;
+  pill.title = `${prefix} · ${summary.fps} FPS · decode+draw ${summary.pipelineMs} ms (max ${summary.pipelineMaxMs} ms) · relay queue ${summary.queuedMs} ms · decoder queue ${summary.decoderQueue} · relay drops ${summary.relayDroppedFrames}`;
+  updateQueueMetric();
+  return summary;
+}
+
 function updateHealth(server: ControlMessage): void {
+  const receivers = (server.receivers as ReceiverTelemetry[] | undefined) ?? [];
+  const obsSummary = renderObsStatus(receivers);
   const sender = latestSender;
   const online = Boolean(server.online) && phoneOnline && latestSettings && sender;
   const networkDrops = delta('networkDrops', Number(sender?.networkDrops) || 0);
   const encoderDrops = delta('encoderDrops', Number(sender?.encoderDrops) || 0);
   const receiverDrops = delta('receiverDrops', latestLocal.droppedFrames);
-  const relayDrops = delta('relayDrops', Number(server.relayDroppedFrames) || 0);
+  const previewActive = receiver.videoEnabled;
+  const relayTotal = previewActive
+    ? (Number(server.relayDroppedFrames) || 0)
+    : (obsSummary?.relayDroppedFrames ?? (Number(server.relayDroppedFrames) || 0));
+  const relayDrops = delta('relayDrops', relayTotal);
   // The iPhone reports every second over the same connection as the video. If its reports stop while it
   // is still connected, everything is stuck behind a backlog: count that silence as queued time, so a
   // stalled link is never blamed on this PC using stale numbers.
-  const silenceMs = performance.now() - latestSenderAt;
+  const now = performance.now();
+  const silenceMs = now - latestSenderAt;
   const stalled = silenceMs > 2500;
   if (stalled && server.online) {
     $('metric-fps-value').textContent = '—';
     $('metric-queue').textContent = `no phone data for ${(silenceMs / 1000).toFixed(1)} s`;
   }
+  const activeQueuedMs = Math.max(
+    0,
+    ...receivers.filter((entry) => entry.videoEnabled !== false).map((entry) => entry.queuedMs),
+  );
+  const localWarmingUp = now - Math.max(streamStartedAt, localVideoResumedAt) < PC_HEALTH_WARMUP_MS;
+  const obsWarmingUp = obsConnectedAt === 0 || now - Math.max(streamStartedAt, obsConnectedAt) < PC_HEALTH_WARMUP_MS;
+  const obsActive = Boolean(obsSummary && obsSummary.videoEnabled !== false);
+  const pcMetrics = previewActive && !localWarmingUp
+    ? {
+        receiverFps: latestLocal.fps,
+        decoderQueue: latestLocal.decoderQueue,
+        receiverDrops,
+        relayDrops,
+        receiverLatencyMs: latestLocal.pipelineMs + activeQueuedMs,
+      }
+    : obsActive && !obsWarmingUp
+      ? {
+          receiverFps: obsSummary!.fps,
+          decoderQueue: obsSummary!.decoderQueue,
+          receiverDrops: 0,
+          relayDrops,
+          receiverLatencyMs: obsSummary!.pipelineMs + obsSummary!.queuedMs,
+        }
+      : {
+          receiverFps: undefined,
+          decoderQueue: 0,
+          receiverDrops: 0,
+          relayDrops: 0,
+          receiverLatencyMs: 0,
+        };
   healthBanner.show(health.update(online ? {
     settings: latestSettings!,
     transport: String(server.transport || 'Unknown'),
@@ -109,12 +229,7 @@ function updateHealth(server: ControlMessage): void {
     senderFps: stalled ? 0 : Number(sender!.fps) || 0,
     rttMs: server.rttMs == null ? null : Number(server.rttMs),
     relayMbps: Number(server.throughputMbps) || 0,
-    receiverFps: latestLocal.fps,
-    decoderQueue: latestLocal.decoderQueue,
-    receiverDrops,
-    relayDrops,
-    receiverLatencyMs: latestLocal.pipelineMs
-      + Math.max(0, ...((server.receivers as Array<{ queuedMs: number }> | undefined) ?? []).map((entry) => entry.queuedMs)),
+    ...pcMetrics,
   } : null));
 }
 
@@ -138,6 +253,13 @@ async function copyText(text: string, label = 'URL'): Promise<void> {
 function setOnline(online: boolean): void {
   if (!online) renderHoldBanner('ok', 'landscape', false);
   phoneOnline = online;
+  if (online) {
+    streamStartedAt = performance.now();
+    localVideoResumedAt = streamStartedAt;
+  } else {
+    streamStartedAt = 0;
+    localVideoResumedAt = 0;
+  }
   $('waiting').classList.toggle('hidden', online);
   const statusChip = $('connection-status');
   const statusText = online ? 'Phone connected' : 'Waiting for phone…';
@@ -178,15 +300,40 @@ function setOnline(online: boolean): void {
     $('metric-rtt').textContent = '— ms';
     $('metric-queue').textContent = 'decoder queue 0';
     $('encoder-mode').textContent = 'Encoder idle';
+    $('encoder-mode').title = 'Encoder idle';
     $('settings-encoder-status').textContent = 'Connect a phone to apply settings.';
     $<HTMLElement>('remote-audio-level').style.setProperty('--level', '0');
     $('remote-audio-db').textContent = '−∞ dB';
     renderAudioStatus();
   }
+  renderPreviewPauseState();
+}
+
+function renderPreviewPauseState(): void {
+  const toggle = $<HTMLButtonElement>('preview-toggle');
+  const pausedByUser = receiver.videoManualPaused;
+  toggle.textContent = pausedByUser ? 'Resume preview' : 'Pause preview';
+  toggle.setAttribute('aria-pressed', String(pausedByUser));
+  toggle.classList.toggle('yellow-button', pausedByUser);
+  toggle.classList.toggle('ico-eye', pausedByUser);
+  toggle.classList.toggle('ico-eye-off', !pausedByUser);
+  $('preview-paused').hidden = !(phoneOnline && !receiver.videoEnabled);
+  updateQueueMetric();
 }
 
 function updateQueueMetric(): void {
   const element = $('metric-queue');
+  if (!receiver.videoEnabled) {
+    if (latestObs && latestObs.videoEnabled !== false && phoneOnline) {
+      const obsMs = latestObs.pipelineMs + latestObs.queuedMs;
+      element.textContent = `OBS ${obsMs} ms · preview paused`;
+      element.title = `Local studio preview paused · OBS decode+draw ${latestObs.pipelineMs} ms · relay queue ${latestObs.queuedMs} ms`;
+    } else {
+      element.textContent = 'preview paused';
+      element.title = 'Local studio preview video decoding is paused; remote controls and OBS remain active';
+    }
+    return;
+  }
   element.textContent = `Q ${lastEncoderQueue}/${lastDecoderQueue} · PC ${lastPipelineMs} ms`;
   element.title = `Encoder queue ${lastEncoderQueue} · decoder queue ${lastDecoderQueue} · PC decode/draw ${lastPipelineMs} ms`;
 }
@@ -239,7 +386,7 @@ receiver.addEventListener('local-telemetry', (event) => {
 const previewCanvas = $<HTMLCanvasElement>('preview');
 let lastFocusAt = 0;
 previewCanvas.addEventListener('click', (event) => {
-  if (!phoneOnline) return;
+  if (!phoneOnline || !receiver.videoEnabled) return;
   const rect = previewCanvas.getBoundingClientRect();
   const x = (event.clientX - rect.left) / rect.width;
   const y = (event.clientY - rect.top) / rect.height;
@@ -394,6 +541,7 @@ function applySenderState(message: ControlMessage): void {
   renderStreamSummary(latestSettings);
   const status = settings.encoderStatus || (settings.bitrateMode === 'constant' ? 'CBR active' : 'VBR active');
   $('encoder-mode').textContent = status;
+  $('encoder-mode').title = status;
   $('settings-encoder-status').textContent = status;
   updateToggle('remote-torch', settings.torch);
   updateToggle('remote-mic', settings.micEnabled);
@@ -666,6 +814,21 @@ function forceKeyframe(): void {
   receiver.command('force-keyframe');
   toast('Keyframe requested');
 }
+$('preview-toggle').addEventListener('click', () => {
+  const nextEnabled = receiver.videoManualPaused;
+  receiver.setVideoEnabled(nextEnabled);
+  toast(nextEnabled ? 'Preview resumed' : 'Preview paused (OBS stays live)');
+});
+$('resume-preview').addEventListener('click', () => {
+  receiver.setVideoEnabled(true);
+  toast('Preview resumed');
+});
+receiver.addEventListener('video-state', () => {
+  latestLocal = { fps: 0, decoderQueue: 0, droppedFrames: latestLocal.droppedFrames, pipelineMs: 0 };
+  previousCounts.receiverDrops = latestLocal.droppedFrames;
+  if (receiver.videoEnabled) localVideoResumedAt = performance.now();
+  renderPreviewPauseState();
+});
 $('audio-monitor').addEventListener('click', () => {
   audioEnabled = !audioEnabled;
   receiver.setAudioMuted(!audioEnabled);

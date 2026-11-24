@@ -115,6 +115,8 @@ h1, h2, h3 { text-wrap: balance; }
 .ico-warn { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3L2 20h20z'/%3E%3Cpath d='M12 10v4M12 17v.5'/%3E%3C/svg%3E"); }
 .ico-x { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 6l12 12M18 6L6 18'/%3E%3C/svg%3E"); }
 .ico-info { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 16v-4M12 8h.01'/%3E%3C/svg%3E"); }
+.ico-eye { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
+.ico-eye-off { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.6 6.2A10.7 10.7 0 0 1 12 6c6.5 0 10 6 10 6a16.8 16.8 0 0 1-3.4 4.3M6.7 6.7C3.9 8.5 2 12 2 12s3.5 6 10 6c1.8 0 3.3-.4 4.7-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18'/%3E%3C/svg%3E"); }
 
 /* fields: boxed selects with an ink chevron */
 select {

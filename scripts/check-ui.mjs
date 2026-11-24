@@ -47,7 +47,12 @@ try {
   };
   const navigate = async (path) => {
     await call('Page.navigate', { url: `${origin}${path}` });
-    await pause(650);
+    for (let i = 0; i < 40; i++) {
+      const ready = await evaluate(`document.readyState === 'complete' && (${path === '/control'} ? (document.getElementById('remote-lens-buttons')?.childElementCount ?? 0) > 0 : true)`);
+      if (ready) break;
+      await pause(50);
+    }
+    await pause(150);
     await evaluate(`document.getElementById('connection-modal')?.close()`);
   };
   const demoFrame = async (width, height) => {
@@ -78,12 +83,40 @@ try {
     const image = await call('Page.captureScreenshot', { format: 'png' });
     await writeFile(`${root}${name}.png`, Buffer.from(image.data, 'base64'));
   };
+  const assertNoStudioScroll = async (label) => {
+    const metrics = await evaluate(`(() => {
+      const doc = document.documentElement;
+      const previewColumn = document.querySelector('.preview-column');
+      const controlPanel = document.querySelector('.control-panel');
+      const buttons = [...document.querySelectorAll('.preview-actions button')].filter((b) => b.offsetParent !== null);
+      const tops = buttons.map((b) => b.getBoundingClientRect().top);
+      const actionSpread = tops.length ? Math.max(...tops) - Math.min(...tops) : 0;
+      return {
+        docScrollH: doc.scrollHeight,
+        docClientH: doc.clientHeight,
+        docScrollW: doc.scrollWidth,
+        innerWidth: window.innerWidth,
+        previewScrollH: previewColumn ? previewColumn.scrollHeight : 0,
+        previewClientH: previewColumn ? previewColumn.clientHeight : 0,
+        panelScrollH: controlPanel ? controlPanel.scrollHeight : 0,
+        panelClientH: controlPanel ? controlPanel.clientHeight : 0,
+        actionSpread,
+      };
+    })()`);
+    assert.ok(metrics.docScrollH <= metrics.docClientH + 1, `${label}: document must not scroll vertically: ${JSON.stringify(metrics)}`);
+    assert.ok(metrics.docScrollW <= metrics.innerWidth + 1, `${label}: document must not scroll horizontally: ${JSON.stringify(metrics)}`);
+    assert.ok(metrics.previewScrollH <= metrics.previewClientH + 1, `${label}: preview column must not scroll vertically: ${JSON.stringify(metrics)}`);
+    assert.ok(metrics.panelScrollH <= metrics.panelClientH + 1, `${label}: control panel must not scroll vertically: ${JSON.stringify(metrics)}`);
+    assert.ok(metrics.actionSpread <= 4, `${label}: preview action buttons must fit on one row: ${JSON.stringify(metrics)}`);
+    console.log(`${label}: no scroll (panel ${metrics.panelScrollH}/${metrics.panelClientH}, preview ${metrics.previewScrollH}/${metrics.previewClientH})`);
+  };
 
   await call('Page.enable');
   await viewport(1440, 900);
   await navigate('/control');
   await demoFrame(1080, 1920);
   await demoFrame(1920, 1080);
+  await assertNoStudioScroll('1440x900');
   await screenshot('control-desktop');
   await evaluate(`(() => {
     const b = document.getElementById('health-banner'); b.hidden = false;
@@ -92,8 +125,9 @@ try {
     document.getElementById('health-action').textContent = 'Lower to 50 Mbps';
   })()`);
   await pause(100);
+  await assertNoStudioScroll('1440x900 with health banner');
   await screenshot('control-health');
-  await evaluate(`document.getElementById('connection-modal').showModal()`);
+  await evaluate(`(() => { const m = document.getElementById('connection-modal'); if (m && !m.open) m.showModal(); })()`);
   await pause(4000);
   // Never publish this PC's address or pairing key: show a demo endpoint in the QR card instead.
   const demoUrl = 'https://192.168.1.20:8443/sender#k=demo-pairing-key';
@@ -113,6 +147,68 @@ try {
   assert.ok(settingsMetrics.height <= settingsMetrics.viewportHeight, `Settings dialog must fit the viewport: ${JSON.stringify(settingsMetrics)}`);
   await screenshot('control-settings');
   await evaluate(`document.getElementById('settings-modal').close()`);
+
+  await viewport(1920, 894);
+  await navigate('/control');
+  await demoFrame(1920, 1080);
+  await evaluate(`(() => {
+    const lenses = document.getElementById('remote-lens-buttons');
+    lenses.replaceChildren(...['0.5×', '1×', 'Tele', 'Auto', 'Front'].map((label, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      if (index === 1) button.classList.add('active');
+      return button;
+    }));
+    const obsPill = document.getElementById('obs-status-pill');
+    obsPill.hidden = false;
+    document.getElementById('obs-status-text').textContent = 'OBS · 60 FPS · 1 ms';
+    document.getElementById('transport-badge').textContent = 'WI-FI';
+    document.getElementById('preview-resolution').textContent = '1920 × 1080';
+    document.getElementById('sum-format').textContent = '1080p60 · 16:9';
+    document.getElementById('sum-codec').textContent = 'H.264';
+    document.getElementById('sum-bitrate').textContent = '60 Mbps';
+    document.getElementById('sum-mode').textContent = 'VBR · quality';
+    const encoder = document.getElementById('encoder-mode');
+    encoder.textContent = 'Active: avc1.640032 · VBR · quality · frames via video element';
+    encoder.title = encoder.textContent;
+  })()`);
+  await pause(100);
+  await assertNoStudioScroll('1920x894 live');
+  await evaluate(`(() => {
+    const b = document.getElementById('hold-banner');
+    b.hidden = false;
+    document.getElementById('hold-banner-title').textContent = 'Turn the phone sideways';
+    document.getElementById('hold-banner-detail').textContent = 'The stream is 16:9 but the phone is upright, so the picture arrives on its side. If it is not, turn off Rotation Lock on the phone.';
+    document.getElementById('hold-banner-action').textContent = 'Use 9:16';
+  })()`);
+  await pause(100);
+  await assertNoStudioScroll('1920x894 with hold banner');
+  const holdCanvasMetrics = await evaluate(`(() => {
+    const r = document.querySelector('canvas').getBoundingClientRect();
+    return { width: r.width, height: r.height, ratio: r.width / r.height };
+  })()`);
+  assert.ok(Math.abs(holdCanvasMetrics.ratio - 1920 / 1080) < .002, `1920×1080 canvas with hold banner must preserve aspect ratio: ${JSON.stringify(holdCanvasMetrics)}`);
+  if (!docs) await screenshot('control-1080p');
+
+  await viewport(1536, 740);
+  await navigate('/control');
+  await demoFrame(1920, 1080);
+  await evaluate(`(() => {
+    const lenses = document.getElementById('remote-lens-buttons');
+    lenses.replaceChildren(...['0.5×', '1×', 'Tele', 'Auto', 'Front'].map((label, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      if (index === 1) button.classList.add('active');
+      return button;
+    }));
+    const encoder = document.getElementById('encoder-mode');
+    encoder.textContent = 'Active: avc1.640032 · VBR · quality · frames via video element';
+    encoder.title = encoder.textContent;
+  })()`);
+  await pause(100);
+  await assertNoStudioScroll('1536x740 compact');
 
   await navigate('/obs');
   await demoFrame(1080, 1920);
@@ -154,7 +250,7 @@ try {
   const landscapeMetrics = await evaluate(`({ viewportWidth: innerWidth, pageWidth: document.documentElement.scrollWidth })`);
   assert.ok(landscapeMetrics.pageWidth <= landscapeMetrics.viewportWidth + 1);
   await screenshot('sender-controls-landscape');
-  console.log(`UI checks passed at 1440×900, 390×844, and 844×390; screenshots saved in ${docs ? 'docs/screenshots' : 'artifacts/ui'}/.`);
+  console.log(`UI checks passed at 1440×900, 1920×894, 1536×740, 390×844, and 844×390; screenshots saved in ${docs ? 'docs/screenshots' : 'artifacts/ui'}/.`);
 } finally {
   ws?.close();
   chrome.kill();

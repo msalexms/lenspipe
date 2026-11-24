@@ -17,6 +17,8 @@ interface Client {
   label: string;
   /** Receiver-only: skip video until the next keyframe (fresh join or after congestion). */
   awaitingKeyframe: boolean;
+  /** Receiver-only: whether this client wants video frames relayed (false while control preview is paused). */
+  videoEnabled: boolean;
   /** Sender only: every byte received on this connection, acknowledged back for flow control. */
   receivedBytes: number;
   /** Sender only: when the last coalesced ack left, and the byte count it covered. */
@@ -87,6 +89,7 @@ export class StreamRelay {
       telemetry: {},
       label,
       awaitingKeyframe: true,
+      videoEnabled: true,
       receivedBytes: 0,
       lastAckAt: 0,
       lastAckedBytes: 0,
@@ -196,7 +199,7 @@ export class StreamRelay {
    * drains and resume only at a keyframe, so the decoder never sees a broken reference chain.
    */
   private relayVideo(receiver: Client, packet: Buffer, keyframe: boolean): void {
-    if (receiver.socket.readyState !== receiver.socket.OPEN) return;
+    if (!receiver.videoEnabled || receiver.socket.readyState !== receiver.socket.OPEN) return;
     const highWater = Math.max(RECEIVER_MIN_HIGH_WATER_BYTES, ((this.throughputMbps * 1_000_000) / 8) * (RECEIVER_MAX_QUEUE_MS / 1000));
     const congested = receiver.socket.bufferedAmount > highWater;
     if (congested || (receiver.awaitingKeyframe && !keyframe)) {
@@ -227,6 +230,14 @@ export class StreamRelay {
     }
     if (message.type === 'command') {
       this.sendToSender(message);
+      return;
+    }
+    if (message.type === 'video-subscription') {
+      const enabled = message.enabled !== false;
+      if (enabled === client.videoEnabled) return;
+      client.videoEnabled = enabled;
+      client.awaitingKeyframe = true;
+      if (enabled && this.isSenderOnline()) this.requestKeyframe();
       return;
     }
     if (message.type === 'receiver-telemetry') {
@@ -297,6 +308,7 @@ export class StreamRelay {
       receivers: receivers.map((client) => ({
         id: client.id,
         label: client.label,
+        videoEnabled: client.videoEnabled,
         queuedMs: this.throughputMbps > 0 ? Math.round((client.socket.bufferedAmount * 8) / (this.throughputMbps * 1000)) : 0,
         fps: Number(client.telemetry.fps) || 0,
         decoderQueue: Number(client.telemetry.decoderQueue) || 0,

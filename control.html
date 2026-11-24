@@ -28,11 +28,17 @@
           <div class="window">
             <div class="window-bar">
               <span class="window-title kicker">Live preview · Phone</span>
-              <span class="preview-topline"><span class="pill"><span class="dot live-dot" aria-hidden="true"></span><span id="transport-badge" class="transport-badge">NO SIGNAL</span></span><span id="preview-resolution" class="pill mono">— × —</span></span>
+              <span class="preview-topline"><span id="obs-status-pill" class="pill obs-status-pill" hidden><span class="dot ok" aria-hidden="true"></span><span id="obs-status-text" class="mono">OBS</span></span><span class="pill"><span class="dot live-dot" aria-hidden="true"></span><span id="transport-badge" class="transport-badge">NO SIGNAL</span></span><span id="preview-resolution" class="pill mono">— × —</span></span>
             </div>
             <div class="preview-frame">
               <canvas id="preview" title="Click to focus (when Focus is Continuous)"></canvas>
               <div id="focus-ring" class="focus-ring" aria-hidden="true"></div>
+              <div id="preview-paused" class="waiting-overlay paused-overlay" hidden>
+                <span class="kicker">OBS mode · Preview paused</span>
+                <strong>Local video decoding is off</strong>
+                <span>OBS and remote camera controls stay live at full quality.</span>
+                <button id="resume-preview" type="button" class="primary-button">Resume preview</button>
+              </div>
               <div id="waiting" class="waiting-overlay">
                 <svg class="sticker" width="78" height="73" viewBox="-10 -8 92 86" aria-hidden="true"><g class="fondo"><path d="M16 5l11 10h18L56 5l5 15v16H11V20z"/><rect x="7" y="25" width="58" height="39" rx="10"/><rect x="4" y="42" width="8" height="12" rx="4"/><rect x="60" y="42" width="8" height="12" rx="4"/></g><path class="thor-cam" d="M16 5l11 10h18L56 5l5 15v13H11V20z"/><circle class="ojos" cx="24" cy="21" r="2.6"/><circle class="ojos" cx="48" cy="21" r="2.6"/><rect class="cuerpo" x="7" y="25" width="58" height="39" rx="10"/><rect class="franja" x="13" y="31" width="11" height="5" rx="2.5"/><circle class="tally" cx="56" cy="34" r="3.6"/><circle class="lente" cx="36" cy="45" r="13.5"/><circle class="pupila" cx="36" cy="45" r="7.5"/><circle class="brillo" cx="33" cy="42" r="2.4"/><rect class="patas" x="4" y="42" width="8" height="12" rx="4"/><rect class="patas" x="60" y="42" width="8" height="12" rx="4"/></svg>
                 <div class="pulse-ring"></div>
@@ -62,6 +68,7 @@
           </div>
           <div class="preview-actions">
             <button id="force-keyframe" type="button" class="secondary-button ink-button" disabled>Force keyframe <kbd>K</kbd></button>
+            <button id="preview-toggle" type="button" class="secondary-button with-icon ico-eye-off" aria-pressed="false" title="Pause local video decoding to dedicate full GPU decoder headroom to OBS. Remote controls and OBS stay live.">Pause preview</button>
             <button id="audio-monitor" type="button" class="secondary-button with-icon ico-mic" aria-pressed="false">Preview audio: off</button>
             <span id="audio-status" class="audio-status" data-level="idle">Phone mic off</span>
             <span>Changes are applied directly on the phone.</span>
@@ -116,7 +123,7 @@
 
           <section class="control-section">
             <div class="section-title">Optics</div>
-            <div class="group">
+            <div class="group optics-group">
               <div class="row slider-row">
                 <label class="row-label" for="remote-zoom">Zoom</label>
                 <strong id="zoom-value">1.0×</strong>
@@ -283,9 +290,9 @@
             <h3>Configure in OBS Studio</h3>
             <ol class="obs-steps">
               <li><strong>Add Browser Source:</strong> In OBS, open <strong>Sources → + → Browser</strong> and name it <em>LensPipe</em>.</li>
-              <li><strong>Paste URL &amp; canvas size:</strong> Paste the URL above and set <strong>Width × Height</strong> to <strong id="obs-size-hint">3840 × 2160</strong> (or your OBS canvas, e.g. <span class="mono">1920 × 1080</span>). Leave Custom CSS empty.</li>
+              <li><strong>Size &amp; frame rate:</strong> Paste the URL above, set <strong>Width × Height</strong> to <strong id="obs-size-hint">3840 × 2160</strong> or your OBS canvas (e.g. <span class="mono">1920 × 1080</span> — WebGL2 scales cleanly), check <strong>Use custom frame rate</strong> at <strong>60</strong> (or your canvas FPS), and leave Custom CSS empty.</li>
               <li><strong>Phone audio (optional):</strong> Check <strong>Control audio via OBS</strong> for a dedicated mixer fader, then turn on <strong>Phone mic</strong> in LensPipe.</li>
-              <li><strong>Scene switching &amp; live control:</strong> Optionally enable <strong>Refresh browser when scene becomes active</strong>. Lens, zoom, aspect, and EV changes apply live.</li>
+              <li><strong>Max GPU headroom &amp; scene switching:</strong> Keep <strong>Settings → Advanced → Sources → Enable Browser Source Hardware Acceleration</strong> enabled and check <strong>Shutdown source when not visible</strong>. Minimizing this studio window pauses its preview automatically (or click <strong>Pause preview</strong>). If HEVC struggles in OBS, switch codec to <strong>H.264 High</strong>.</li>
             </ol>
           </section>
           <aside class="firewall-warning obs-trust-card">
