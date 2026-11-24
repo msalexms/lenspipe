@@ -84,7 +84,6 @@ h1, h2, h3 { text-wrap: balance; }
 .primary-button:hover:not(:disabled) { background: var(--ams-marca-hover); }
 :is(.primary-button, .secondary-button, .btn):active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 :is(.primary-button, .secondary-button, .btn):disabled { box-shadow: none; }
-.ink-button { background: var(--tinta) !important; color: #fff !important; box-shadow: 3px 3px 0 #8A86A0 !important; }
 .yellow-button { background: var(--amarillo) !important; color: var(--tinta) !important; }
 
 /* small boxed label (status, resolution, transport) */

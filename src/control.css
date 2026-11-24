@@ -323,12 +323,12 @@ dialog.obs-dialog { width: min(820px, calc(100vw - 32px)); }
   .studio-header { min-height: 60px; padding: 8px 14px; gap: 10px; }
   .studio-brand { font-size: 1.2rem; }
   .studio-brand .thor { width: 30px; height: 30px; }
-  .studio-brand span, #header-settings, #header-about { display: none; }
+  .studio-brand span { display: none; }
   .status-chip { margin-right: 0; }
   .status-chip > span { display: none; }
   .header-actions { gap: 8px; }
   .header-actions .secondary-button { min-height: 38px; padding: 0 10px; font-size: .84rem; }
-  .header-actions .secondary-button::before { display: none; }
+  .header-actions .secondary-button:not(.icon-button)::before { display: none; }
   .studio-layout { padding: 14px; gap: 16px; min-height: calc(100dvh - 60px); }
   .window { padding: 8px; }
   .preview-frame { min-height: 200px; height: 52vw; }

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>LensPipe · Studio</title>
-    <link rel="stylesheet" href="/src/control.css" />
+    <link rel="stylesheet" href="../src/control.css" />
   </head>
   <body>
     <div class="studio-shell">
@@ -17,7 +17,6 @@
         <div class="header-actions">
           <span id="connection-status" class="status-chip pill" role="status"><i aria-hidden="true"></i><span>Waiting for phone…</span></span>
           <button id="show-connection" type="button" class="secondary-button with-icon ico-plug">Connect phone</button>
-          <button id="header-settings" type="button" class="secondary-button with-icon ico-sliders" aria-haspopup="dialog">Settings</button>
           <button id="open-obs" type="button" class="secondary-button yellow-button with-icon ico-obs" aria-haspopup="dialog">OBS source</button>
           <button id="header-about" type="button" class="secondary-button icon-button with-icon ico-info" aria-haspopup="dialog" aria-label="About LensPipe" title="About"></button>
         </div>
@@ -67,7 +66,7 @@
             <div><span>Dropped</span><strong id="metric-dropped">0</strong><small>decoder + transport</small></div>
           </div>
           <div class="preview-actions">
-            <button id="force-keyframe" type="button" class="secondary-button ink-button" disabled>Force keyframe <kbd>K</kbd></button>
+            <button id="force-keyframe" type="button" class="secondary-button" title="Ask the phone for a full frame: fixes a smeared or frozen picture" disabled>Keyframe <kbd>K</kbd></button>
             <button id="preview-toggle" type="button" class="secondary-button with-icon ico-eye-off" aria-pressed="false" title="Pause local video decoding to dedicate full GPU decoder headroom to OBS. Remote controls and OBS stay live.">Pause preview</button>
             <button id="audio-monitor" type="button" class="secondary-button with-icon ico-mic" aria-pressed="false">Preview audio: off</button>
             <span id="audio-status" class="audio-status" data-level="idle" hidden></span>
@@ -110,7 +109,7 @@
 
           <section class="control-section">
             <div class="group stream-box">
-              <div class="stream-head"><span class="section-title">Stream</span><button id="open-settings" class="secondary-button small-button" type="button" aria-haspopup="dialog">Settings →</button></div>
+              <div class="stream-head"><span class="section-title">Stream</span><button id="open-settings" class="secondary-button small-button with-icon ico-sliders" type="button" aria-haspopup="dialog">Settings</button></div>
               <dl class="cajetin">
                 <div><dt>Format</dt><dd id="sum-format">—</dd></div>
                 <div><dt>Codec</dt><dd id="sum-codec">—</dd></div>
@@ -149,7 +148,7 @@
             </div>
           </section>
 
-          <footer class="panel-footer">WebCodecs · binary WebSocket · hardware decode<span id="encoder-mode">Encoder idle</span><div class="footer-brand"><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · MIT</span><button id="footer-about" type="button" class="text-link" aria-haspopup="dialog">About</button></div></footer>
+          <footer class="panel-footer">WebCodecs · binary WebSocket · hardware decode<span id="encoder-mode">Encoder idle</span><div class="footer-brand"><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · GPL-3.0</span></div></footer>
         </aside>
       </main>
     </div>
@@ -251,17 +250,18 @@
             <p>Streams your phone's camera (iPhone or Android) straight to your PC and OBS over USB or Wi-Fi/LAN using WebCodecs and binary WebSockets. Everything stays on your local network.</p>
             <div class="about-links">
               <a class="secondary-button small-button" href="https://amstech.dev" target="_blank" rel="noopener noreferrer">amstech.dev ↗</a>
+              <a class="secondary-button small-button" href="https://github.com/msalexms/lenspipe" target="_blank" rel="noopener noreferrer">Source code ↗</a>
               <a class="secondary-button small-button" href="/diag" target="_blank" rel="noopener noreferrer">Camera diagnostics ↗</a>
             </div>
           </div>
         </section>
         <dl class="cajetin about-specs">
           <div><dt>Version</dt><dd>v1.0.0</dd></div>
-          <div><dt>License</dt><dd>MIT · Open source</dd></div>
+          <div><dt>License</dt><dd>GPL-3.0 · Open source</dd></div>
           <div><dt>Pipeline</dt><dd>WebCodecs · WebSocket</dd></div>
           <div><dt>Privacy</dt><dd>Local network only</dd></div>
         </dl>
-        <footer><span>Shortcut: <kbd>K</kbd> forces a keyframe · Click preview to focus</span><span>© AMSTech</span></footer>
+        <footer><span>Shortcut: <kbd>K</kbd> forces a keyframe · Click preview to focus</span><span>© 2026 AMSTech · GPL-3.0-or-later, no warranty</span></footer>
       </form>
     </dialog>
 
@@ -319,6 +319,6 @@
       </form>
     </dialog>
     <div id="studio-toast" role="status" aria-live="polite"></div>
-    <script type="module" src="/src/control/main.ts"></script>
+    <script type="module" src="../src/control/main.ts"></script>
   </body>
 </html>

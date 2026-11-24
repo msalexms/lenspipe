@@ -17,9 +17,8 @@ import {
   type ProfileName,
   type StreamSettings,
 } from '../stream-settings';
-import { paintRanges, stepsBar, watchRanges } from '../amstech-ui';
+import { $, closeOnBackdropClick, paintRanges, stepsBar, watchRanges } from '../amstech-ui';
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 type NetworkEndpoint = { name: string; address: string; transport?: 'USB' | 'Wi-Fi'; url: string; networkCategory?: string; firewallFix?: string; linkDown?: boolean };
 type NetworkSnapshot = { usb: NetworkEndpoint[]; wifi: NetworkEndpoint[]; updatedAt: number };
 type SenderSettings = {
@@ -470,9 +469,6 @@ receiver.addEventListener('pairing-required', () => {
   overlay.querySelector('span:not(.kicker)')!.textContent = 'Open the studio URL with its pairing key (copy it from the PC studio), or use the PC itself.';
   $('waiting-connect').hidden = true;
 });
-// Learn the pairing key up front so the OBS URL and QR codes carry it.
-void refreshNetwork();
-
 function onlineText(value: unknown): string {
   return value ? 'LIVE' : 'NO SIGNAL';
 }
@@ -683,7 +679,7 @@ function renderHoldBanner(hold: SenderSettings['hold'], orientation: 'landscape'
     const [here, there] = landscape ? [ratio, ratio.split(':').reverse().join(':')] : [ratio.split(':').reverse().join(':'), ratio];
     $('hold-banner-detail').textContent = `The stream is ${here} but the phone is ${landscape ? 'upright' : 'sideways'}, so the picture arrives on its side. If it is not, turn off Rotation Lock on the phone.`;
     $('hold-banner-action').textContent = `Use ${there}`;
-    holdFix = { command: 'set-orientation', orientation: landscape ? 'portrait' : 'landscape' };
+    holdFix = { command: 'set-encoding', settings: { orientation: landscape ? 'portrait' : 'landscape' } };
   }
   banner.hidden = false;
 }
@@ -716,12 +712,12 @@ $('remote-lens').addEventListener('change', (event) => receiver.command('set-len
 $('remote-torch').addEventListener('click', () => receiver.command('set-torch', { enabled: !$('remote-torch').classList.contains('active') }));
 $('remote-mic').addEventListener('click', () => receiver.command('set-mic', { enabled: !$('remote-mic').classList.contains('active') }));
 $('remote-mute').addEventListener('click', () => receiver.command('set-mute', { muted: !$('remote-mute').classList.contains('active') }));
-$('landscape').addEventListener('click', () => receiver.command('set-orientation', { orientation: 'landscape' }));
-$('portrait').addEventListener('click', () => receiver.command('set-orientation', { orientation: 'portrait' }));
-$('remote-turned').addEventListener('click', () => receiver.command('set-encoding', { settings: { turned: !$('remote-turned').classList.contains('active') } }));
 function setEncoding(settings: Partial<StreamSettings>): void {
   receiver.command('set-encoding', { settings });
 }
+$('landscape').addEventListener('click', () => setEncoding({ orientation: 'landscape' }));
+$('portrait').addEventListener('click', () => setEncoding({ orientation: 'portrait' }));
+$('remote-turned').addEventListener('click', () => setEncoding({ turned: !$('remote-turned').classList.contains('active') }));
 $('remote-preset').addEventListener('change', (event) => setEncoding({ preset: (event.currentTarget as HTMLSelectElement).value as StreamSettings['preset'] }));
 $('remote-codec').addEventListener('change', (event) => setEncoding({ codec: (event.currentTarget as HTMLSelectElement).value }));
 $('remote-rate-control').addEventListener('change', (event) => setEncoding({ bitrateMode: (event.currentTarget as HTMLSelectElement).value as StreamSettings['bitrateMode'] }));
@@ -736,25 +732,11 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-profile
     toast(`${profile.label} profile sent to the phone`);
   });
 }
-function enableBackdropClose(dialog: HTMLDialogElement): void {
-  dialog.addEventListener('click', (event) => {
-    if (event.target !== dialog || event.detail === 0) return;
-    const rect = dialog.getBoundingClientRect();
-    const inside = event.clientX >= rect.left && event.clientX <= rect.right
-      && event.clientY >= rect.top && event.clientY <= rect.bottom;
-    if (!inside) dialog.close();
-  });
-}
-enableBackdropClose($<HTMLDialogElement>('settings-modal'));
-enableBackdropClose($<HTMLDialogElement>('connection-modal'));
-enableBackdropClose($<HTMLDialogElement>('about-modal'));
-enableBackdropClose($<HTMLDialogElement>('obs-modal'));
+for (const id of ['settings-modal', 'connection-modal', 'about-modal', 'obs-modal']) closeOnBackdropClick($<HTMLDialogElement>(id));
 const openSettings = () => $<HTMLDialogElement>('settings-modal').showModal();
 const openAbout = () => $<HTMLDialogElement>('about-modal').showModal();
 $('open-settings').addEventListener('click', openSettings);
-$('header-settings').addEventListener('click', openSettings);
 $('header-about').addEventListener('click', openAbout);
-$('footer-about').addEventListener('click', openAbout);
 const bitrateInput = $<HTMLInputElement>('remote-bitrate');
 bitrateInput.addEventListener('pointerdown', () => { draggingBitrate = true; });
 bitrateInput.addEventListener('input', () => {
@@ -1198,7 +1180,7 @@ function firewallWarning(endpoint: NetworkEndpoint): HTMLElement {
   const title = document.createElement('strong');
   title.textContent = `⚠ Windows Firewall will block the phone on “${endpoint.name}”`;
   const text = document.createElement('p');
-  text.textContent = 'Windows classifies this network as Public, and Node.js is only allowed on Private networks, so the page never loads on the phone. '
+  text.textContent = 'Windows classifies this network as Public, and LensPipe is only allowed through the firewall on Private networks, so the page never loads on the phone. '
     + 'Run this once in PowerShell as administrator (it only opens this port to this USB subnet):';
   const command = document.createElement('code');
   command.textContent = endpoint.firewallFix || '';
@@ -1215,6 +1197,7 @@ function firewallWarning(endpoint: NetworkEndpoint): HTMLElement {
 
 setOnline(false);
 watchRanges();
+// Learn the pairing key up front so the OBS URL and QR codes carry it.
 void refreshNetwork();
 scheduleNetworkPoll();
 window.setTimeout(() => { if (!phoneOnline) openConnection(); }, 1100);

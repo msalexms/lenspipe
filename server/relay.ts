@@ -63,17 +63,20 @@ export class StreamRelay {
 
   constructor(private readonly network: NetworkScanner) {}
 
+  private readonly onNetworkChange = (snapshot: NetworkSnapshot) => {
+    this.refreshSenderTransport();
+    this.broadcastControl({ type: 'network', network: snapshot });
+  };
+
   start(): void {
     this.interval = setInterval(() => this.tick(), 1000);
     this.interval.unref();
-    this.network.on('change', (snapshot: NetworkSnapshot) => {
-      this.refreshSenderTransport();
-      this.broadcastControl({ type: 'network', network: snapshot });
-    });
+    this.network.on('change', this.onNetworkChange);
   }
 
   stop(): void {
     if (this.interval) clearInterval(this.interval);
+    this.network.off('change', this.onNetworkChange);
   }
 
   accept(socket: WebSocket, role: 'sender' | 'receiver', remoteAddress?: string, label: string = role): void {
