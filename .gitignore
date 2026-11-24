@@ -6,3 +6,5 @@ certs/
 artifacts/
 .DS_Store
 diagnostics/
+src-tauri/target/
+src-tauri/binaries/
