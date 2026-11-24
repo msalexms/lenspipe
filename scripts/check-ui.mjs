@@ -6,9 +6,8 @@ import { chromePath } from './chrome-path.mjs';
 import QRCode from 'qrcode';
 import { fileURLToPath } from 'node:url';
 
-// `--docs` (npm run screenshots) refreshes the README images in docs/screenshots/; otherwise they are scratch files.
-const docs = process.argv.includes('--docs');
-const root = fileURLToPath(new URL(docs ? '../docs/screenshots/' : '../artifacts/ui/', import.meta.url));
+// Layout checks; the screenshots are scratch files for review (README images: npm run screenshots).
+const root = fileURLToPath(new URL('../artifacts/ui/', import.meta.url));
 const profile = fileURLToPath(new URL('../artifacts/chrome-profile/', import.meta.url));
 await mkdir(root, { recursive: true });
 await rm(profile, { recursive: true, force: true });
@@ -189,7 +188,7 @@ try {
     return { width: r.width, height: r.height, ratio: r.width / r.height };
   })()`);
   assert.ok(Math.abs(holdCanvasMetrics.ratio - 1920 / 1080) < .002, `1920×1080 canvas with hold banner must preserve aspect ratio: ${JSON.stringify(holdCanvasMetrics)}`);
-  if (!docs) await screenshot('control-1080p');
+  await screenshot('control-1080p');
 
   await viewport(1536, 740);
   await navigate('/control');
@@ -250,7 +249,7 @@ try {
   const landscapeMetrics = await evaluate(`({ viewportWidth: innerWidth, pageWidth: document.documentElement.scrollWidth })`);
   assert.ok(landscapeMetrics.pageWidth <= landscapeMetrics.viewportWidth + 1);
   await screenshot('sender-controls-landscape');
-  console.log(`UI checks passed at 1440×900, 1920×894, 1536×740, 390×844, and 844×390; screenshots saved in ${docs ? 'docs/screenshots' : 'artifacts/ui'}/.`);
+  console.log(`UI checks passed at 1440×900, 1920×894, 1536×740, 390×844, and 844×390; screenshots saved in artifacts/ui/.`);
 } finally {
   ws?.close();
   chrome.kill();

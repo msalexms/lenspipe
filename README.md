@@ -15,8 +15,7 @@
 Use your phone (**iPhone or Android**) as a low-latency studio camera on your PC and in OBS, over a USB cable or Wi-Fi. The phone only needs its browser: no app, no account, no cloud. Video never leaves your local network.
 
 <p align="center">
-  <img src="docs/screenshots/control-desktop.png" alt="PC studio with live preview, telemetry and remote camera controls" width="690">
-  <img src="docs/screenshots/sender-controls-mobile.png" alt="Phone camera page with lens, aspect, torch, mic and settings keys" width="210">
+  <img src="docs/screenshots/control-desktop.png" alt="PC studio streaming live from the phone, with OBS connected, telemetry and remote camera controls" width="900">
 </p>
 
 ## Features
@@ -66,6 +65,10 @@ Click **Connect phone** in the studio and scan a QR code with the phone's camera
 
 **Wi-Fi / LAN:** put the phone and the PC on the same network and scan the **Wi-Fi / LAN** QR code.
 
+<p align="center">
+  <img src="docs/screenshots/control-connection.png" alt="Connect phone dialog with a QR code for the USB cable and one for Wi-Fi" width="700">
+</p>
+
 The first time, the phone warns about the certificate, because it is created on your PC and not by a public authority. Tap **Show Details → visit this website** (iPhone) or **Advanced → Proceed** (Android). Then tap **Start camera**.
 
 ## Use it in OBS
@@ -80,7 +83,11 @@ The first time, the phone warns about the certificate, because it is created on 
 
 ## Settings
 
-Open **Settings** in the studio's Stream panel (or on the phone).
+Open **Settings** in the studio's Stream panel, or on the phone. Changes apply at once and the phone remembers them.
+
+<p align="center">
+  <img src="docs/screenshots/control-settings.png" alt="Stream settings in the studio: quick profiles, format, codec, bitrate, rate control, focus, exposure and microphone" width="700">
+</p>
 
 | Profile | Format | Codec | Bitrate | Best for |
 | --- | --- | --- | --- | --- |
@@ -93,6 +100,13 @@ Open **Settings** in the studio's Stream panel (or on the phone).
 - On the phone, **OLED off** turns the screen black while streaming; hold for 2 seconds to wake it.
 - In the studio, click the preview to focus, and press `K` to recover a smeared or frozen picture.
 - `/diag` on the phone tests which formats each lens really supports.
+
+The phone, streaming held sideways, and its own settings:
+
+<p align="center">
+  <img src="docs/screenshots/sender-live.png" alt="The phone streaming, held sideways: lens, aspect, rotate, torch, mic, OLED off and settings keys" width="560">
+  <img src="docs/screenshots/sender-settings.png" alt="Stream settings on the phone" width="120">
+</p>
 
 ## Troubleshooting
 
