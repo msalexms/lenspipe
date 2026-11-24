@@ -295,17 +295,24 @@
               <li><strong>Max GPU headroom &amp; scene switching:</strong> Keep <strong>Settings → Advanced → Sources → Enable Browser Source Hardware Acceleration</strong> enabled and check <strong>Shutdown source when not visible</strong>. Minimizing this studio window pauses its preview automatically (or click <strong>Pause preview</strong>). If HEVC struggles in OBS, switch codec to <strong>H.264 High</strong>.</li>
             </ol>
           </section>
-          <aside class="firewall-warning obs-trust-card">
-            <strong>⚠ Blank or black source in OBS?</strong>
-            <div class="segments obs-os-tabs" role="tablist" aria-label="Operating system">
-              <button type="button" data-obs-os="win32" role="tab" aria-selected="true" class="active">Windows</button>
-              <button type="button" data-obs-os="darwin" role="tab" aria-selected="false">macOS</button>
-              <button type="button" data-obs-os="linux" role="tab" aria-selected="false">Linux</button>
+          <aside id="obs-trust-card" class="firewall-warning obs-trust-card">
+            <strong id="obs-trust-title">⚠ Blank or black source in OBS?</strong>
+            <div id="obs-cert-auto" class="obs-cert-auto" hidden>
+              <span id="obs-cert-status" class="pill"><span class="dot" aria-hidden="true"></span><span>Checking…</span></span>
+              <button id="obs-trust-btn" type="button" class="primary-button small-button" hidden>Trust for OBS (1 click)</button>
             </div>
-            <p id="obs-cert-intro">Run once in PowerShell from the LensPipe folder, then restart OBS:</p>
-            <code id="obs-cert-cmd">Import-Certificate -FilePath '.\certs\local-cert.pem' -CertStoreLocation Cert:\CurrentUser\Root</code>
-            <button id="obs-copy-cert" type="button" class="copy-button secondary-button small-button with-icon ico-copy">Copy command</button>
-            <small id="obs-cert-note">Only trust a certificate generated on your own PC.</small>
+            <details id="obs-manual-details" class="obs-manual-details" open>
+              <summary id="obs-manual-summary">Manual command / other OS</summary>
+              <div class="segments obs-os-tabs" role="tablist" aria-label="Operating system">
+                <button type="button" data-obs-os="win32" role="tab" aria-selected="true" class="active">Windows</button>
+                <button type="button" data-obs-os="darwin" role="tab" aria-selected="false">macOS</button>
+                <button type="button" data-obs-os="linux" role="tab" aria-selected="false">Linux</button>
+              </div>
+              <p id="obs-cert-intro">Run once in PowerShell from the LensPipe folder, then restart OBS:</p>
+              <code id="obs-cert-cmd">Import-Certificate -FilePath '.\certs\local-cert.pem' -CertStoreLocation Cert:\CurrentUser\Root</code>
+              <button id="obs-copy-cert" type="button" class="copy-button secondary-button small-button with-icon ico-copy">Copy command</button>
+              <small id="obs-cert-note">Only trust a certificate generated on your own PC.</small>
+            </details>
           </aside>
         </div>
         <footer><span>Tip: Shift-click “OBS source” in the top bar to open /obs directly.</span><a href="/obs" target="_blank" rel="noopener noreferrer">Open /obs in new tab ↗</a></footer>

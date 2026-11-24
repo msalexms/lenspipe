@@ -5,10 +5,29 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const origin = process.env.TEST_ORIGIN || 'https://localhost:8443';
 const wsOrigin = origin.replace(/^http/, 'ws');
 
-for (const path of ['/sender', '/control', '/obs', '/api/network', '/pcm-player-worklet.js']) {
+for (const path of ['/sender', '/control', '/obs', '/api/network', '/api/health', '/api/obs/cert-trust', '/pcm-player-worklet.js']) {
   const response = await fetch(origin + path);
   assert.equal(response.status, 200, `${path} should return HTTP 200`);
+  if (path === '/api/health') {
+    const health = await response.json();
+    assert.equal(health.ok, true, '/api/health must report ok: true');
+  }
 }
+
+const missingActionTrust = await fetch(`${origin}/api/obs/cert-trust`, {
+  method: 'POST',
+  headers: { origin },
+});
+assert.equal(missingActionTrust.status, 403, 'POST /api/obs/cert-trust without x-lenspipe-action header must return 403');
+
+const foreignOriginTrust = await fetch(`${origin}/api/obs/cert-trust`, {
+  method: 'POST',
+  headers: {
+    origin: 'https://evil.example',
+    'x-lenspipe-action': 'trust-cert',
+  },
+});
+assert.equal(foreignOriginTrust.status, 403, 'POST /api/obs/cert-trust with foreign Origin must return 403');
 
 const pending = new Map();
 function connect(role) {
