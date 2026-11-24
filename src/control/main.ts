@@ -437,7 +437,7 @@ function renderAudioStatus(): void {
   if (micProblem) {
     [text, level] = [micProblem.startsWith('Tap') ? 'Tap the phone screen to start its mic' : 'Phone mic blocked: see message on the phone', 'warn'];
   } else if (!senderMicEnabled) {
-    [text, level] = ['Phone mic off', 'idle'];
+    [text, level] = ['', 'idle'];
   } else if (senderMuted) {
     [text, level] = ['Phone mic muted', 'idle'];
   } else if (!lastAudio || lastAudio.chunksPerSecond === 0) {
@@ -451,6 +451,8 @@ function renderAudioStatus(): void {
   if (lastAudio) lastUnderruns = lastAudio.underruns;
   element.textContent = text;
   element.dataset.level = level;
+  // "Phone mic off" needs no label: the Preview audio button already shows it.
+  element.hidden = text.length === 0;
 }
 
 receiver.addEventListener('decoder-error', () => toast('Codec unsupported by this browser; try H.264 High'));
