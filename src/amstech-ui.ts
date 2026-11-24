@@ -1,5 +1,8 @@
 /** Small helpers for the AMSTech look (see src/shared.css and src/amstech-ui/). */
 
+/** The element with this id (the pages only look up ids they define). */
+export const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
+
 /** Fills the blue part of a slider track up to its value: the track gradient reads --v. */
 export function paintRange(input: HTMLInputElement): void {
   const min = Number(input.min || 0);
@@ -21,6 +24,17 @@ export function watchRanges(): void {
     if (target instanceof HTMLInputElement && target.type === 'range') paintRange(target);
   });
   paintRanges();
+}
+
+/** Closes a modal <dialog> on a click on its backdrop (outside its box), like a sheet. */
+export function closeOnBackdropClick(dialog: HTMLDialogElement): void {
+  dialog.addEventListener('click', (event) => {
+    if (event.target !== dialog || event.detail === 0) return;
+    const rect = dialog.getBoundingClientRect();
+    const inside = event.clientX >= rect.left && event.clientX <= rect.right
+      && event.clientY >= rect.top && event.clientY <= rect.bottom;
+    if (!inside) dialog.close();
+  });
 }
 
 /**

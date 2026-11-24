@@ -54,6 +54,22 @@
         animation: pulse 1.2s infinite;
       }
       @keyframes pulse { 50% { opacity: .4; } }
+      .error { display: none; max-width: 520px; }
+      body.failed .error { display: block; }
+      body.failed .sub { display: none; }
+      .error p { margin: 0 0 12px; font-size: .95rem; }
+      .error pre {
+        max-height: 180px; margin: 0 0 14px; padding: 10px; overflow: auto;
+        background: #F4EEE3; border: 1.5px solid #1E1B2E; border-radius: 4px;
+        font: 500 .74rem/1.4 ui-monospace, Consolas, monospace; text-align: left; white-space: pre-wrap;
+      }
+      .error pre:empty { display: none; }
+      .error button {
+        padding: 9px 18px; background: #FF5C39; color: #1E1B2E; cursor: pointer;
+        border: 2.5px solid #1E1B2E; border-radius: 6px; box-shadow: 3px 3px 0 #1E1B2E;
+        font: 800 .95rem system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      .error button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #1E1B2E; }
     </style>
   </head>
   <body>
@@ -79,6 +95,31 @@
       </svg>
       <div class="title">LensPipe Studio</div>
       <div class="sub"><span class="dot"></span>Starting LensPipe Studio…</div>
+      <div class="error" role="alert">
+        <p id="error-message"></p>
+        <pre id="error-details"></pre>
+        <button id="retry" type="button">Try again</button>
+      </div>
     </main>
+    <script>
+      // The desktop shell opens this page with ?error=…&details=… when the server cannot start.
+      const params = new URLSearchParams(location.search);
+      const error = params.get('error');
+      if (error) {
+        document.body.classList.add('failed');
+        document.getElementById('error-message').textContent = error;
+        document.getElementById('error-details').textContent = params.get('details') || '';
+        document.title = 'LensPipe · Error';
+      }
+      document.getElementById('retry').addEventListener('click', async () => {
+        document.body.classList.remove('failed');
+        try {
+          await window.__TAURI_INTERNALS__.invoke('restart_server');
+        } catch (reason) {
+          document.body.classList.add('failed');
+          document.getElementById('error-details').textContent = String(reason);
+        }
+      });
+    </script>
   </body>
 </html>

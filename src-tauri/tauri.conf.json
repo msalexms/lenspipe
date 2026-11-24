@@ -42,6 +42,7 @@
       "../dist/": "web/"
     },
     "publisher": "AMSTech",
+    "license": "GPL-3.0-or-later",
     "category": "Video",
     "shortDescription": "Turn any phone into a low-latency studio camera for PC & OBS",
     "longDescription": "Stream your iPhone or Android camera to PC and OBS over USB or Wi-Fi using WebCodecs and binary WebSockets. No phone app, no cloud, local network only.",
