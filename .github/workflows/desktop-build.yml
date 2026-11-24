@@ -1,0 +1,102 @@
+name: Desktop Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'server/**'
+      - 'src/**'
+      - 'control.html'
+      - 'sender.html'
+      - 'obs.html'
+      - 'scripts/build-sidecar.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/desktop-build.yml'
+
+jobs:
+  build-desktop:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target-triple: x86_64-pc-windows-msvc
+            args: ''
+          - platform: macos-latest
+            target-triple: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-15-intel
+            target-triple: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            target-triple: x86_64-unknown-linux-gnu
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target-triple }}
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Linux Tauri dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Typecheck & run unit tests
+        run: npm run typecheck && npm test
+
+      - name: Build and publish release installers
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: LensPipe v__VERSION__
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Build desktop installer artifacts
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: npm run tauri:build -- ${{ matrix.args }}
+
+      - name: Upload installer artifacts
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: lenspipe-${{ matrix.target-triple }}
+          path: |
+            src-tauri/target/**/release/bundle/**/*.exe
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.deb
+          if-no-files-found: warn

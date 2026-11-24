@@ -907,6 +907,7 @@ function renderObsCertGuide(): void {
     button.setAttribute('aria-selected', String(active));
   }
   const showAuto = isLocalBrowserHost() && (!serverPlatform || obsOs === serverPlatform);
+  const isLocalHttp = isLocalBrowserHost() && location.protocol === 'http:';
   $('obs-cert-auto').hidden = !showAuto;
   const card = $('obs-trust-card');
   const title = $('obs-trust-title');
@@ -915,35 +916,53 @@ function renderObsCertGuide(): void {
   const statusText = statusPill.querySelector('span:last-child');
   const trustBtn = $<HTMLButtonElement>('obs-trust-btn');
   const details = $<HTMLDetailsElement>('obs-manual-details');
+  const summary = $('obs-manual-summary');
 
-  if (showAuto && certTrust.trusted === true) {
+  if (showAuto && isLocalHttp) {
     card.dataset.trusted = 'true';
-    title.textContent = '✓ Certificate trusted for OBS';
+    title.textContent = '✓ Ready for local OBS';
     if (statusDot) statusDot.className = 'dot ok';
-    if (statusText) statusText.textContent = 'Trusted on this PC';
-    trustBtn.hidden = true;
+    if (statusText) statusText.textContent = 'No certificate needed (local HTTP)';
+    summary.textContent = 'Using HTTPS or OBS on another PC?';
+    if (certTrust.checked && certTrust.trusted === false && certTrust.supported) {
+      trustBtn.hidden = false;
+      trustBtn.disabled = certTrust.busy;
+      trustBtn.textContent = certTrust.busy ? 'Confirm in OS prompt…' : 'Also trust HTTPS cert';
+    } else {
+      trustBtn.hidden = true;
+    }
     if (!obsManualToggled && !obsOsManual) details.open = false;
   } else {
-    card.dataset.trusted = 'false';
-    title.textContent = '⚠ Blank or black source in OBS?';
-    if (showAuto) {
-      if (!certTrust.checked) {
-        if (statusDot) statusDot.className = 'dot';
-        if (statusText) statusText.textContent = 'Checking…';
-        trustBtn.hidden = true;
-      } else if (certTrust.trusted === false && certTrust.supported) {
-        if (statusDot) statusDot.className = 'dot live';
-        if (statusText) statusText.textContent = 'Not trusted yet';
-        trustBtn.hidden = false;
-        trustBtn.disabled = certTrust.busy;
-        trustBtn.textContent = certTrust.busy ? 'Confirm in OS prompt…' : 'Trust for OBS (1 click)';
-      } else {
-        if (statusDot) statusDot.className = 'dot';
-        if (statusText) statusText.textContent = 'Manual setup required';
-        trustBtn.hidden = true;
+    summary.textContent = 'Manual command / other OS';
+    if (showAuto && certTrust.trusted === true) {
+      card.dataset.trusted = 'true';
+      title.textContent = '✓ Certificate trusted for OBS';
+      if (statusDot) statusDot.className = 'dot ok';
+      if (statusText) statusText.textContent = 'Trusted on this PC';
+      trustBtn.hidden = true;
+      if (!obsManualToggled && !obsOsManual) details.open = false;
+    } else {
+      card.dataset.trusted = 'false';
+      title.textContent = '⚠ Blank or black source in OBS?';
+      if (showAuto) {
+        if (!certTrust.checked) {
+          if (statusDot) statusDot.className = 'dot';
+          if (statusText) statusText.textContent = 'Checking…';
+          trustBtn.hidden = true;
+        } else if (certTrust.trusted === false && certTrust.supported) {
+          if (statusDot) statusDot.className = 'dot live';
+          if (statusText) statusText.textContent = 'Not trusted yet';
+          trustBtn.hidden = false;
+          trustBtn.disabled = certTrust.busy;
+          trustBtn.textContent = certTrust.busy ? 'Confirm in OS prompt…' : 'Trust for OBS (1 click)';
+        } else {
+          if (statusDot) statusDot.className = 'dot';
+          if (statusText) statusText.textContent = 'Manual setup required';
+          trustBtn.hidden = true;
+        }
       }
+      if (!obsManualToggled) details.open = true;
     }
-    if (!obsManualToggled) details.open = true;
   }
   const path = obsCertPathFor(obsOs);
   const usingAbsolute = Boolean(localCertPath && obsOs === serverPlatform);
@@ -971,7 +990,11 @@ function updateObsModal(): void {
   $('obs-url').textContent = obsUrl();
   const localHost = isLocalBrowserHost();
   const lanBase = latestNetwork.wifi[0]?.url;
-  if (localHost) {
+  if (localHost && location.protocol === 'http:') {
+    $('obs-url-hint').textContent = lanBase
+      ? `Use this local URL when OBS runs on this PC (no certificate trust or pairing key needed). From another PC on the same LAN, use ${withPairingToken(`${lanBase}/obs`)}.`
+      : 'Use this local URL when OBS runs on this PC (no certificate trust or pairing key needed).';
+  } else if (localHost) {
     $('obs-url-hint').textContent = lanBase
       ? `Use this URL when OBS runs on this PC (no pairing key needed). From another PC on the same LAN, use ${withPairingToken(`${lanBase}/obs`)}.`
       : 'Use this URL when OBS runs on this PC (no pairing key needed here).';
