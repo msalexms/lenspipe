@@ -300,6 +300,7 @@ function setOnline(online: boolean): void {
     $('metric-rtt').textContent = '— ms';
     $('metric-queue').textContent = 'decoder queue 0';
     $('encoder-mode').textContent = 'Encoder idle';
+    $('encoder-mode').title = 'Encoder idle';
     $('settings-encoder-status').textContent = 'Connect a phone to apply settings.';
     $<HTMLElement>('remote-audio-level').style.setProperty('--level', '0');
     $('remote-audio-db').textContent = '−∞ dB';
@@ -540,6 +541,7 @@ function applySenderState(message: ControlMessage): void {
   renderStreamSummary(latestSettings);
   const status = settings.encoderStatus || (settings.bitrateMode === 'constant' ? 'CBR active' : 'VBR active');
   $('encoder-mode').textContent = status;
+  $('encoder-mode').title = status;
   $('settings-encoder-status').textContent = status;
   updateToggle('remote-torch', settings.torch);
   updateToggle('remote-mic', settings.micEnabled);
