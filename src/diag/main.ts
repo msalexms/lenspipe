@@ -2,6 +2,7 @@
  * Camera format diagnostics: which capture sizes and frame rates Safari really delivers on each lens.
  * Results go to the PC (POST /api/diagnostics) and are saved under diagnostics/.
  */
+import { $ } from '../amstech-ui';
 import { pairingToken } from '../pairing';
 
 const SIZES: Array<[number, number, string]> = [
@@ -25,7 +26,6 @@ interface Attempt {
   capabilities?: Record<string, unknown>;
 }
 
-const $ = (id: string) => document.getElementById(id)!;
 const video = $('probe') as HTMLVideoElement;
 const status = (text: string) => { $('status').textContent = text; };
 const pause = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));

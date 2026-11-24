@@ -10,9 +10,9 @@ on:
       - 'src-tauri/**'
       - 'server/**'
       - 'src/**'
-      - 'control.html'
-      - 'sender.html'
-      - 'obs.html'
+      - 'pages/**'
+      - 'public/**'
+      - 'vite.config.ts'
       - 'scripts/build-sidecar.mjs'
       - 'package.json'
       - 'package-lock.json'
@@ -71,6 +71,12 @@ jobs:
 
       - name: Typecheck & run unit tests
         run: npm run typecheck && npm test
+
+      - name: Build and test the server sidecar on this OS
+        shell: bash
+        run: |
+          npm run build && npm run build:sidecar
+          node scripts/test-desktop-server.mjs --binary "src-tauri/binaries/lenspipe-server-${{ matrix.target-triple }}${{ runner.os == 'Windows' && '.exe' || '' }}"
 
       - name: Build and publish release installers
         if: startsWith(github.ref, 'refs/tags/v')

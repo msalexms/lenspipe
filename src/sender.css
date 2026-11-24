@@ -31,7 +31,9 @@
 .brand { display: flex; align-items: center; gap: 8px; font-size: 1.15rem; }
 .brand .live-dot { margin-left: 4px; }
 .sender-shell:has(.start-screen.hidden) .live-dot { background: var(--ams-senal); }
-.telemetry-pill { display: flex; gap: 10px; max-width: 100%; font: 500 .76rem var(--mono); color: var(--tinta2); white-space: nowrap; overflow-x: auto; scrollbar-width: none; font-variant-numeric: tabular-nums; }
+.telemetry-pill { display: flex; gap: 10px; max-width: 100%; margin: 0; padding: 0; background: none; border: 0; box-shadow: none; min-height: 0; text-align: left; cursor: pointer; font: 500 .76rem var(--mono); color: var(--tinta2); white-space: nowrap; overflow-x: auto; scrollbar-width: none; font-variant-numeric: tabular-nums; }
+/* tap the pill for bitrate, size and encoder queue */
+.telemetry-pill[aria-expanded="false"] .detail { display: none; }
 .telemetry-pill strong { color: var(--tinta); font-weight: 500; }
 
 /* warning over the top of the picture: the yellow box with its fix */
@@ -56,7 +58,7 @@
 .lens-buttons button:disabled { opacity: 1; color: color-mix(in srgb, var(--tinta) 45%, var(--hoja)); }
 .lens-buttons button.active:disabled { background: color-mix(in srgb, var(--amarillo) 50%, var(--hoja)); }
 
-.primary-actions { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.primary-actions { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .glass-button, .blackout-button {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   min-height: 62px; padding: 6px 2px; border: var(--ancho) solid var(--borde); border-radius: var(--r); background: var(--hoja); color: var(--tinta);
@@ -65,6 +67,7 @@
 .glass-button.with-icon::before, .blackout-button.with-icon::before { width: 22px; height: 22px; }
 .glass-button:active:not(:disabled), .blackout-button:active { transform: translate(2px, 2px); box-shadow: none; }
 .glass-button.active { background: var(--amarillo); color: var(--tinta); }
+.glass-button.muted { background: color-mix(in srgb, var(--aviso) 35%, var(--hoja)); color: var(--tinta); }
 .glass-button:disabled { opacity: .45; box-shadow: none; }
 
 .zoom-control { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 2px; }
@@ -149,9 +152,8 @@ html.blackout-active, html.blackout-active * { -webkit-user-select: none !import
 #blackout-overlay.show-hint .blackout-hint, #blackout-overlay.holding .blackout-hint { opacity: 1; }
 
 @media (max-width: 520px) {
-  /* 4 + 3 keys: Settings takes the spare one */
-  .primary-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .settings-button { grid-column: span 2; }
+  /* two rows of three keys */
+  .primary-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .health-banner { grid-template-columns: minmax(0, 1fr) auto; }
   .health-banner #health-action { grid-column: 1 / -1; grid-row: 2; }
 }
@@ -183,7 +185,6 @@ html.blackout-active, html.blackout-active * { -webkit-user-select: none !import
   .lens-buttons { margin: 0; }
   .lens-buttons button { min-height: 36px; font-size: .86rem; }
   .primary-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-  .settings-button { grid-column: span 2; }
   .glass-button, .blackout-button { min-height: 40px; flex-direction: row; justify-content: flex-start; gap: 8px; padding: 6px 10px; box-shadow: 2px 2px 0 var(--borde); }
   .glass-button.with-icon::before, .blackout-button.with-icon::before { width: 16px; height: 16px; }
   .zoom-control { margin-top: auto; padding: 0; }

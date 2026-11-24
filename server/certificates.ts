@@ -1,4 +1,5 @@
 import selfsigned from 'selfsigned';
+import { X509Certificate } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -14,6 +15,17 @@ export interface CertificateFiles {
 const USB_HOTSPOT_SAN_IPS = Array.from({ length: 14 }, (_, index) => `172.20.10.${index + 1}`);
 /** Bump when the certificate's shape changes, so existing installs regenerate it. */
 const CERT_PROFILE = 2;
+/** Renew this long before the 825-day certificate expires, so a running studio never serves an expired one. */
+const RENEW_BEFORE_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function expiresSoon(certPath: string): Promise<boolean> {
+  try {
+    const validTo = Date.parse(new X509Certificate(await readFile(certPath)).validTo);
+    return !Number.isFinite(validTo) || validTo - Date.now() < RENEW_BEFORE_MS;
+  } catch {
+    return true;
+  }
+}
 
 /**
  * The certificate is a CA (iOS only offers full trust for CA certificates), and users install it as a
@@ -66,7 +78,7 @@ export async function ensureCertificate(
   const activeAddresses = [...network.usb, ...network.wifi].map((endpoint) => endpoint.address);
   const uniqueAddresses = [...new Set(['127.0.0.1', ...USB_HOTSPOT_SAN_IPS, ...activeAddresses])].sort();
   const storedSans = existsSync(keyPath) && existsSync(certPath) ? await readStoredSans(sansPath) : null;
-  const needsRegeneration = !storedSans || uniqueAddresses.some((ip) => !storedSans.has(ip));
+  const needsRegeneration = !storedSans || uniqueAddresses.some((ip) => !storedSans.has(ip)) || await expiresSoon(certPath);
 
   if (needsRegeneration) {
     const altNames = [

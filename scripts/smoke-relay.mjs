@@ -116,7 +116,8 @@ sender.send(jsonPacket({ type: 'sender-telemetry', fps: 60, droppedFrames: 2, wi
 await waitFor(control, (message) => message.type === 'sender-telemetry' && message.fps === 60, 'sender telemetry');
 control.send(jsonPacket({ type: 'command', command: 'set-zoom', value: 2 }));
 await waitFor(sender, (message) => message.type === 'command' && message.command === 'set-zoom' && message.value === 2, 'remote command');
-const serverTelemetry = await waitFor(control, (message) => message.type === 'telemetry' && message.online && typeof message.throughputMbps === 'number', 'server throughput telemetry', 4000);
+// Telemetry goes out once a second: wait for a report that covers the media sent above (an earlier one may read 0).
+const serverTelemetry = await waitFor(control, (message) => message.type === 'telemetry' && message.online && message.throughputMbps > 0, 'server throughput telemetry', 4000);
 assert.ok(serverTelemetry.throughputMbps > 0);
 
 // Video subscription pause/resume: paused /ws/control skips video & receives telemetry showing videoEnabled=false while /obs receives every frame.

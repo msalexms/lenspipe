@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Desktop-mode server test
+        run: npm run test:desktop
+
+      - name: Relay smoke test
+        run: |
+          LENSPIPE_DATA_DIR="$RUNNER_TEMP/lenspipe" PORT=8443 node dist-server/index.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -sk https://localhost:8443/api/health > /dev/null && break
+            sleep 1
+          done
+          npm run test:relay || { cat "$RUNNER_TEMP/server.log"; exit 1; }

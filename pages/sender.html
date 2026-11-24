@@ -6,15 +6,15 @@
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>LensPipe · Sender</title>
-    <link rel="stylesheet" href="/src/sender.css" />
+    <link rel="stylesheet" href="../src/sender.css" />
   </head>
   <body>
     <main class="sender-shell">
       <header class="sender-header">
         <div class="brand logo" translate="no"><svg class="thor" width="26" height="26" viewBox="-2 -2 52 52" aria-hidden="true"><path class="cabeza" d="M10 4L21 14h6L38 4l5 14q1 2 1 6v12q0 8-8 8H12q-8 0-8-8V24q0-4 1-6z"/><path class="prompt" d="M13 25l6 5-6 5M24 36h10"/></svg>lenspipe<span class="live-dot dot" aria-hidden="true"></span></div>
-        <div class="telemetry-pill">
-          <strong id="transport">—</strong><span id="bitrate-live">0 Mbps</span><span id="resolution-live">—</span><span id="fps-live">0 FPS</span><span id="queue-live">Q0</span>
-        </div>
+        <button id="telemetry" type="button" class="telemetry-pill" aria-expanded="false" title="Show stream details">
+          <strong id="transport">—</strong><span id="fps-live">0 FPS</span><span class="detail" id="bitrate-live">0 Mbps</span><span class="detail" id="resolution-live">—</span><span class="detail" id="queue-live" title="Frames waiting in the encoder">queue 0</span>
+        </button>
       </header>
       <div class="preview-stage"><video id="camera-preview" autoplay muted playsinline disablepictureinpicture></video><div id="crop-guide" class="crop-guide" aria-hidden="true" hidden></div><div id="hold-hint" class="hold-banner" role="status" hidden><div><strong id="hold-title"></strong><small id="hold-detail"></small></div><button id="hold-action" type="button" class="primary-button"></button></div></div>
 
@@ -30,8 +30,7 @@
           <button id="orientation" type="button" class="glass-button with-icon ico-aspect" title="Switch aspect ratio">16:9</button>
           <button id="turn" type="button" class="glass-button with-icon ico-rotate" title="Turn the picture over (phone mounted upside down)" aria-pressed="false">Rotate 180°</button>
           <button id="torch" type="button" class="glass-button with-icon ico-torch" title="Toggle torch" aria-pressed="false" disabled>Torch</button>
-          <button id="mic" type="button" class="glass-button with-icon ico-mic" title="Enable phone microphone" aria-pressed="false">Mic off</button>
-          <button id="mute" type="button" class="glass-button with-icon ico-mute" title="Mute microphone" aria-pressed="false" disabled>Mute</button>
+          <button id="mic" type="button" class="glass-button with-icon ico-mute" title="Turn the microphone on" aria-pressed="false">Mic off</button>
           <button id="blackout" type="button" class="blackout-button with-icon ico-moon" title="Turn the OLED screen black">OLED off</button>
           <button id="open-settings" type="button" class="glass-button with-icon ico-sliders settings-button" title="Stream settings" aria-haspopup="dialog">Settings</button>
         </div>
@@ -97,7 +96,7 @@
           <p>Enable camera access, then keep this tab open. Works on iPhone and Android — for USB, connect the cable and enable Personal Hotspot or USB tethering.</p>
           <button id="start" class="primary-button">Start camera</button>
           <small id="start-note">WebCodecs · direct local WebSocket · iPhone &amp; Android · no cloud</small>
-          <small class="start-signature"><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · MIT</span></small>
+          <small class="start-signature"><span class="signature" translate="no"><b>An AMSTech project</b> · Open source · GPL-3.0</span></small>
         </div>
       </section>
       <div id="focus-ring" class="focus-ring" aria-hidden="true"></div>
@@ -107,6 +106,6 @@
         <span class="blackout-hint" aria-hidden="true">Hold 2s to wake</span>
       </div>
     </main>
-    <script type="module" src="/src/sender/main.ts"></script>
+    <script type="module" src="../src/sender/main.ts"></script>
   </body>
 </html>

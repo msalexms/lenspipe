@@ -64,6 +64,8 @@ export function certFingerprints(pem: string): { sha1: string; sha256: string } 
   };
 }
 
+const nssDb = (homeDir: string) => resolve(homeDir, '.pki', 'nssdb');
+
 export async function checkCertificateTrust(
   certPath: string,
   certPem: string,
@@ -73,39 +75,26 @@ export async function checkCertificateTrust(
   const homeDir = options.homeDir ?? homedir();
   const exec = options.exec ?? execFileSafe;
   const { sha1 } = certFingerprints(certPem);
+  const status = (trusted: boolean | null, supported = true): CertTrustStatus =>
+    ({ trusted, supported, platform, fingerprint: sha1, certPath });
+  const unsupported = status(null, false);
 
   if (platform === 'win32') {
     const userStore = await exec('certutil', ['-user', '-verifystore', 'Root', sha1]);
-    if (userStore.exitCode === 0) {
-      return { trusted: true, supported: true, platform, fingerprint: sha1, certPath };
-    }
-    if (userStore.code === 'ENOENT') {
-      return { trusted: null, supported: false, platform, fingerprint: sha1, certPath };
-    }
+    if (userStore.exitCode === 0) return status(true);
+    if (userStore.code === 'ENOENT') return unsupported;
     const machineStore = await exec('certutil', ['-verifystore', 'Root', sha1]);
-    return {
-      trusted: machineStore.exitCode === 0,
-      supported: true,
-      platform,
-      fingerprint: sha1,
-      certPath,
-    };
+    return status(machineStore.exitCode === 0);
   }
 
   if (platform === 'darwin') {
     const res = await exec('security', ['verify-cert', '-c', certPath]);
-    if (res.code === 'ENOENT') {
-      return { trusted: null, supported: false, platform, fingerprint: sha1, certPath };
-    }
-    return { trusted: res.exitCode === 0, supported: true, platform, fingerprint: sha1, certPath };
+    return res.code === 'ENOENT' ? unsupported : status(res.exitCode === 0);
   }
 
   if (platform === 'linux') {
-    const nssdb = resolve(homeDir, '.pki', 'nssdb');
-    const res = await exec('certutil', ['-d', `sql:${nssdb}`, '-L', '-n', 'LensPipe', '-a']);
-    if (res.code === 'ENOENT') {
-      return { trusted: null, supported: false, platform, fingerprint: sha1, certPath };
-    }
+    const res = await exec('certutil', ['-d', `sql:${nssDb(homeDir)}`, '-L', '-n', 'LensPipe', '-a']);
+    if (res.code === 'ENOENT') return unsupported;
     let trusted = false;
     if (res.exitCode === 0 && res.stdout.includes('BEGIN CERTIFICATE')) {
       try {
@@ -114,11 +103,14 @@ export async function checkCertificateTrust(
         trusted = false;
       }
     }
-    return { trusted, supported: true, platform, fingerprint: sha1, certPath };
+    return status(trusted);
   }
 
-  return { trusted: null, supported: false, platform, fingerprint: sha1, certPath };
+  return unsupported;
 }
+
+const MANUAL = 'Could not install certificate automatically. Use the manual command below.';
+const NO_NSS_TOOLS = 'certutil (libnss3-tools / nss-tools) is unavailable; run the manual command below.';
 
 export async function installCertificateTrust(
   certPath: string,
@@ -131,47 +123,28 @@ export async function installCertificateTrust(
   const exists = options.exists ?? existsSync;
   const mkdirFn = options.mkdirFn ?? mkdir;
 
+  const unsupported = (message: string): CertTrustInstallResult => ({ trusted: false, supported: false, message });
+  const cancelled = (message: string): CertTrustInstallResult => ({ trusted: false, cancelled: true, supported: true, message });
+  /** After the OS tool ran: trusted now, or the manual fallback. */
+  const verify = async (): Promise<CertTrustInstallResult> => (
+    (await checkCertificateTrust(certPath, certPem, options)).trusted === true
+      ? { trusted: true, supported: true, message: 'Certificate trusted. Restart OBS Studio if it is open.' }
+      : { trusted: false, supported: true, message: MANUAL }
+  );
+
   const status = await checkCertificateTrust(certPath, certPem, options);
   if (status.trusted === true) {
-    return {
-      trusted: true,
-      alreadyTrusted: true,
-      supported: true,
-      message: 'Certificate is already trusted on this PC.',
-    };
+    return { trusted: true, alreadyTrusted: true, supported: true, message: 'Certificate is already trusted on this PC.' };
   }
 
   if (platform === 'win32') {
     const res = await exec('certutil', ['-user', '-addstore', 'Root', certPath]);
-    if (res.code === 'ENOENT') {
-      return {
-        trusted: false,
-        supported: false,
-        message: 'certutil is unavailable; run the PowerShell command below.',
-      };
+    if (res.code === 'ENOENT') return unsupported('certutil is unavailable; run the PowerShell command below.');
+    const result = await verify();
+    if (!result.trusted && (res.exitCode === 1223 || /cancel|0x800704c7|ERROR_CANCELLED/i.test(`${res.stderr}\n${res.stdout}`))) {
+      return cancelled('Certificate confirmation was cancelled.');
     }
-    const recheck = await checkCertificateTrust(certPath, certPem, options);
-    if (recheck.trusted === true) {
-      return {
-        trusted: true,
-        supported: true,
-        message: 'Certificate trusted. Restart OBS Studio if it is open.',
-      };
-    }
-    const output = `${res.stderr}\n${res.stdout}`;
-    if (res.exitCode === 1223 || /cancel|0x800704c7|ERROR_CANCELLED/i.test(output)) {
-      return {
-        trusted: false,
-        cancelled: true,
-        supported: true,
-        message: 'Certificate confirmation was cancelled.',
-      };
-    }
-    return {
-      trusted: false,
-      supported: true,
-      message: 'Could not install certificate automatically. Use the manual command below.',
-    };
+    return result;
   }
 
   if (platform === 'darwin') {
@@ -181,76 +154,22 @@ export async function installCertificateTrust(
       '-e', 'end run',
       certPath,
     ]);
-    if (res.code === 'ENOENT') {
-      return {
-        trusted: false,
-        supported: false,
-        message: 'osascript is unavailable; run the Terminal command below.',
-      };
-    }
-    const output = `${res.stderr}\n${res.stdout}`;
-    if (/cancel|-128/i.test(output)) {
-      return {
-        trusted: false,
-        cancelled: true,
-        supported: true,
-        message: 'Administrator prompt was cancelled.',
-      };
-    }
-    const recheck = await checkCertificateTrust(certPath, certPem, options);
-    if (recheck.trusted === true) {
-      return {
-        trusted: true,
-        supported: true,
-        message: 'Certificate trusted. Restart OBS Studio if it is open.',
-      };
-    }
-    return {
-      trusted: false,
-      supported: true,
-      message: 'Could not install certificate automatically. Use the manual command below.',
-    };
+    if (res.code === 'ENOENT') return unsupported('osascript is unavailable; run the Terminal command below.');
+    if (/cancel|-128/i.test(`${res.stderr}\n${res.stdout}`)) return cancelled('Administrator prompt was cancelled.');
+    return verify();
   }
 
   if (platform === 'linux') {
-    const nssdb = resolve(homeDir, '.pki', 'nssdb');
+    const nssdb = nssDb(homeDir);
     await mkdirFn(nssdb, { recursive: true });
     if (!exists(resolve(nssdb, 'cert9.db'))) {
       const initRes = await exec('certutil', ['-d', `sql:${nssdb}`, '-N', '--empty-password']);
-      if (initRes.code === 'ENOENT') {
-        return {
-          trusted: false,
-          supported: false,
-          message: 'certutil (libnss3-tools / nss-tools) is unavailable; run the manual command below.',
-        };
-      }
+      if (initRes.code === 'ENOENT') return unsupported(NO_NSS_TOOLS);
     }
     const addRes = await exec('certutil', ['-d', `sql:${nssdb}`, '-A', '-t', 'C,,', '-n', 'LensPipe', '-i', certPath]);
-    if (addRes.code === 'ENOENT') {
-      return {
-        trusted: false,
-        supported: false,
-        message: 'certutil (libnss3-tools / nss-tools) is unavailable; run the manual command below.',
-      };
-    }
-    const recheck = await checkCertificateTrust(certPath, certPem, options);
-    if (recheck.trusted === true) {
-      return {
-        trusted: true,
-        supported: true,
-        message: 'Certificate trusted. Restart OBS Studio if it is open.',
-      };
-    }
-    return {
-      trusted: false,
-      supported: true,
-      message: 'Could not install certificate automatically. Use the manual command below.',
-    };
+    if (addRes.code === 'ENOENT') return unsupported(NO_NSS_TOOLS);
+    return verify();
   }
 
-  return {
-    trusted: false,
-    supported: false,
-    message: 'Automatic certificate trust is not supported on this OS.',
-  };
+  return unsupported('Automatic certificate trust is not supported on this OS.');
 }
