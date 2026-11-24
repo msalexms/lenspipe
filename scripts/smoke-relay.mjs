@@ -100,5 +100,62 @@ await waitFor(sender, (message) => message.type === 'command' && message.command
 const serverTelemetry = await waitFor(control, (message) => message.type === 'telemetry' && message.online && typeof message.throughputMbps === 'number', 'server throughput telemetry', 4000);
 assert.ok(serverTelemetry.throughputMbps > 0);
 
+// Video subscription pause/resume: paused /ws/control skips video & receives telemetry showing videoEnabled=false while /obs receives every frame.
+control.send(jsonPacket({ type: 'video-subscription', enabled: false }));
+const pausedTelemetry = await waitFor(
+  control,
+  (message) => message.type === 'telemetry'
+    && Array.isArray(message.receivers)
+    && message.receivers.some((r) => r.label === 'control' && r.videoEnabled === false)
+    && message.receivers.some((r) => r.label === 'obs' && r.videoEnabled === true),
+  'paused video-subscription telemetry',
+  4000,
+);
+assert.ok(pausedTelemetry);
+const controlVideoBeforePause = pending.get(control).filter((m) => Buffer.isBuffer(m) && (m[0] === 0x02 || m[0] === 0x03)).length;
+
+const obsOnlyKeyframe = Buffer.alloc(13);
+obsOnlyKeyframe[0] = 0x02;
+obsOnlyKeyframe.writeDoubleBE(234567.25, 1);
+obsOnlyKeyframe.writeUInt32BE(0x11223344, 9);
+const obsOnlyDelta = Buffer.alloc(13);
+obsOnlyDelta[0] = 0x03;
+obsOnlyDelta.writeDoubleBE(234568.25, 1);
+obsOnlyDelta.writeUInt32BE(0x55667788, 9);
+sender.send(obsOnlyKeyframe);
+sender.send(obsOnlyDelta);
+
+const obsGotKf = await waitFor(obs, (m) => Buffer.isBuffer(m) && m[0] === 0x02 && m.readDoubleBE(1) === 234567.25, 'OBS keyframe while control paused');
+const obsGotDelta = await waitFor(obs, (m) => Buffer.isBuffer(m) && m[0] === 0x03 && m.readDoubleBE(1) === 234568.25, 'OBS delta while control paused');
+assert.deepEqual(obsGotKf, obsOnlyKeyframe);
+assert.deepEqual(obsGotDelta, obsOnlyDelta);
+
+// Round-trip control command after sending video frames ensures control socket flushed before asserting no video arrived.
+control.send(jsonPacket({ type: 'command', command: 'set-torch', enabled: true }));
+await waitFor(sender, (m) => m.type === 'command' && m.command === 'set-torch' && m.enabled === true, 'post-pause control command');
+sender.send(jsonPacket({ type: 'sender-state', torch: true }));
+await waitFor(control, (m) => m.type === 'sender-state' && m.torch === true, 'sender-state while video paused');
+const controlVideoWhilePaused = pending.get(control).filter((m) => Buffer.isBuffer(m) && (m[0] === 0x02 || m[0] === 0x03)).length;
+assert.equal(controlVideoWhilePaused, controlVideoBeforePause, 'paused receiver must not receive video frames');
+
+// Re-enable video subscription: requests keyframe and resumes relaying video to control.
+const kfCountBeforeResume = pending.get(sender).filter((m) => m.type === 'command' && m.command === 'force-keyframe').length;
+control.send(jsonPacket({ type: 'video-subscription', enabled: true }));
+await waitFor(
+  sender,
+  () => pending.get(sender).filter((m) => m.type === 'command' && m.command === 'force-keyframe').length > kfCountBeforeResume,
+  'force-keyframe on subscription resume',
+  4000,
+);
+const resumedKeyframe = Buffer.alloc(13);
+resumedKeyframe[0] = 0x02;
+resumedKeyframe.writeDoubleBE(345678.5, 1);
+resumedKeyframe.writeUInt32BE(0x99aabbcc, 9);
+sender.send(resumedKeyframe);
+for (const client of [control, obs]) {
+  const relayed = await waitFor(client, (m) => Buffer.isBuffer(m) && m[0] === 0x02 && m.readDoubleBE(1) === 345678.5, 'resumed keyframe');
+  assert.deepEqual(relayed, resumedKeyframe);
+}
+
 for (const client of [sender, control, obs]) client.close();
-console.log('Smoke test passed: HTTPS views, cached configs, byte-identical video relay, byte acknowledgements, focus round-trip, two-way control, and live telemetry.');
+console.log('Smoke test passed: HTTPS views, cached configs, byte-identical video relay, pause/resume video subscription, byte acknowledgements, focus round-trip, two-way control, and live telemetry.');
