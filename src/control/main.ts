@@ -850,6 +850,17 @@ let localCertPath = '';
 let serverPlatform = '';
 let obsOs: ObsOs = detectBrowserOs();
 let obsOsManual = false;
+let obsManualToggled = false;
+let certTrust: { checked: boolean; trusted: boolean | null; supported: boolean; busy: boolean } = {
+  checked: false,
+  trusted: null,
+  supported: false,
+  busy: false,
+};
+
+function isLocalBrowserHost(): boolean {
+  return location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
+}
 
 function obsUrl(): string {
   return withPairingToken(`${location.origin}/obs`);
@@ -868,11 +879,71 @@ function obsCertPathFor(os: ObsOs): string {
   return os === 'win32' ? '.\\certs\\local-cert.pem' : './certs/local-cert.pem';
 }
 
+async function refreshObsCertTrust(): Promise<void> {
+  if (!isLocalBrowserHost()) return;
+  try {
+    const response = await fetch('/api/obs/cert-trust', { cache: 'no-store' });
+    if (!response.ok) {
+      certTrust = { ...certTrust, checked: true, trusted: null, supported: false };
+    } else {
+      const data = await response.json() as { trusted: boolean | null; supported: boolean };
+      certTrust = {
+        ...certTrust,
+        checked: true,
+        trusted: data.trusted,
+        supported: Boolean(data.supported),
+      };
+    }
+  } catch {
+    certTrust = { ...certTrust, checked: true, trusted: null, supported: false };
+  }
+  renderObsCertGuide();
+}
+
 function renderObsCertGuide(): void {
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-obs-os]')) {
     const active = button.dataset.obsOs === obsOs;
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', String(active));
+  }
+  const showAuto = isLocalBrowserHost() && (!serverPlatform || obsOs === serverPlatform);
+  $('obs-cert-auto').hidden = !showAuto;
+  const card = $('obs-trust-card');
+  const title = $('obs-trust-title');
+  const statusPill = $('obs-cert-status');
+  const statusDot = statusPill.querySelector('.dot');
+  const statusText = statusPill.querySelector('span:last-child');
+  const trustBtn = $<HTMLButtonElement>('obs-trust-btn');
+  const details = $<HTMLDetailsElement>('obs-manual-details');
+
+  if (showAuto && certTrust.trusted === true) {
+    card.dataset.trusted = 'true';
+    title.textContent = '✓ Certificate trusted for OBS';
+    if (statusDot) statusDot.className = 'dot ok';
+    if (statusText) statusText.textContent = 'Trusted on this PC';
+    trustBtn.hidden = true;
+    if (!obsManualToggled && !obsOsManual) details.open = false;
+  } else {
+    card.dataset.trusted = 'false';
+    title.textContent = '⚠ Blank or black source in OBS?';
+    if (showAuto) {
+      if (!certTrust.checked) {
+        if (statusDot) statusDot.className = 'dot';
+        if (statusText) statusText.textContent = 'Checking…';
+        trustBtn.hidden = true;
+      } else if (certTrust.trusted === false && certTrust.supported) {
+        if (statusDot) statusDot.className = 'dot live';
+        if (statusText) statusText.textContent = 'Not trusted yet';
+        trustBtn.hidden = false;
+        trustBtn.disabled = certTrust.busy;
+        trustBtn.textContent = certTrust.busy ? 'Confirm in OS prompt…' : 'Trust for OBS (1 click)';
+      } else {
+        if (statusDot) statusDot.className = 'dot';
+        if (statusText) statusText.textContent = 'Manual setup required';
+        trustBtn.hidden = true;
+      }
+    }
+    if (!obsManualToggled) details.open = true;
   }
   const path = obsCertPathFor(obsOs);
   const usingAbsolute = Boolean(localCertPath && obsOs === serverPlatform);
@@ -898,7 +969,7 @@ function renderObsCertGuide(): void {
 
 function updateObsModal(): void {
   $('obs-url').textContent = obsUrl();
-  const localHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
+  const localHost = isLocalBrowserHost();
   const lanBase = latestNetwork.wifi[0]?.url;
   if (localHost) {
     $('obs-url-hint').textContent = lanBase
@@ -924,13 +995,45 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-obs-os]
   });
 }
 
+document.querySelector('#obs-manual-details summary')?.addEventListener('click', () => {
+  obsManualToggled = true;
+});
+
+$('obs-trust-btn').addEventListener('click', async () => {
+  if (certTrust.busy) return;
+  certTrust.busy = true;
+  renderObsCertGuide();
+  try {
+    const response = await fetch('/api/obs/cert-trust', {
+      method: 'POST',
+      headers: { 'x-lenspipe-action': 'trust-cert' },
+    });
+    if (!response.ok) {
+      toast('Could not trust certificate — try the manual command below', 4500);
+      return;
+    }
+    const result = await response.json() as { trusted: boolean; supported: boolean; message?: string };
+    certTrust.checked = true;
+    certTrust.trusted = Boolean(result.trusted);
+    certTrust.supported = Boolean(result.supported);
+    toast(result.message || (result.trusted ? 'Certificate trusted — restart OBS' : 'Could not trust certificate'), 4500);
+  } catch {
+    toast('Could not trust certificate — try the manual command below', 4500);
+  } finally {
+    certTrust.busy = false;
+    renderObsCertGuide();
+  }
+});
+
 $('open-obs').addEventListener('click', (event) => {
   if (event.shiftKey) {
     window.open('/obs', '_blank');
     return;
   }
+  obsManualToggled = false;
   updateObsModal();
   $<HTMLDialogElement>('obs-modal').showModal();
+  void refreshObsCertTrust();
 });
 $('open-obs').title = 'Show OBS Studio setup guide and URL. Shift-click to open /obs directly.';
 $('obs-copy-url').addEventListener('click', () => void copyText(obsUrl(), 'OBS browser source URL'));

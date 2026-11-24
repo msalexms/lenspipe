@@ -5,7 +5,9 @@ import { resolve, extname, sep } from 'node:path';
 import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { ensureCertificate } from './certificates.js';
+import { checkCertificateTrust, installCertificateTrust, type CertTrustInstallResult } from './cert-trust.js';
 import { NetworkScanner } from './network.js';
+import { resolveAppPaths } from './paths.js';
 import { StreamRelay } from './relay.js';
 import { isLocalRequest, loadPairingToken, PAIRING_REQUIRED_CLOSE_CODE, tokenMatches } from './pairing.js';
 
@@ -35,14 +37,15 @@ async function findAvailablePort(startPort: number, maxAttempts = 10): Promise<n
   return startPort;
 }
 
+const paths = resolveAppPaths();
 const requestedPort = Number(process.env.PORT || 8443);
 let port = await findAvailablePort(requestedPort);
-const dist = resolve(process.cwd(), 'dist');
+const dist = paths.distDir;
 const network = new NetworkScanner(port);
 network.start();
-const certificate = await ensureCertificate(network.snapshot);
+const certificate = await ensureCertificate(network.snapshot, paths.certsDir);
 const certFilePath = resolve(certificate.directory, 'local-cert.pem');
-const pairingToken = await loadPairingToken(certificate.directory);
+const pairingToken = await loadPairingToken(paths.certsDir);
 
 const app = Fastify({
   logger: { level: process.env.LOG_LEVEL || 'info' },
@@ -128,8 +131,38 @@ function isPairedHttp(request: import('fastify').FastifyRequest): boolean {
 app.get('/api/network', async (request, reply) => {
   if (!isPairedHttp(request)) return reply.code(401).send();
   return isLocalRequest(request.socket.remoteAddress, request.headers)
-    ? { ...network.snapshot, pairingToken, certPath: certFilePath, platform: process.platform }
+    ? { ...network.snapshot, pairingToken, certPath: certFilePath, platform: process.platform, desktop: paths.desktop }
     : network.snapshot;
+});
+
+app.get('/api/health', async () => ({
+  ok: true,
+  port,
+  desktop: paths.desktop,
+  platform: process.platform,
+}));
+
+app.get('/api/obs/cert-trust', async (request, reply) => {
+  if (!isLocalRequest(request.socket.remoteAddress, request.headers)) return reply.code(403).send();
+  return checkCertificateTrust(certFilePath, certificate.cert);
+});
+
+let pendingCertTrust: Promise<CertTrustInstallResult> | null = null;
+app.post('/api/obs/cert-trust', async (request, reply) => {
+  if (!isLocalRequest(request.socket.remoteAddress, request.headers)) return reply.code(403).send();
+  const origin = request.headers.origin;
+  try {
+    if (!origin || new URL(origin).host !== request.headers.host) return reply.code(403).send();
+  } catch {
+    return reply.code(403).send();
+  }
+  if (request.headers['x-lenspipe-action'] !== 'trust-cert') return reply.code(403).send();
+  if (!pendingCertTrust) {
+    pendingCertTrust = installCertificateTrust(certFilePath, certificate.cert).finally(() => {
+      pendingCertTrust = null;
+    });
+  }
+  return pendingCertTrust;
 });
 
 const MAX_DIAGNOSTIC_REPORTS = 50;
@@ -142,7 +175,7 @@ app.post('/api/diagnostics', { bodyLimit: 512 * 1024 }, async (request, reply) =
   } catch {
     return reply.code(403).send();
   }
-  const directory = resolve(process.cwd(), 'diagnostics');
+  const directory = paths.diagnosticsDir;
   await mkdir(directory, { recursive: true });
   // Bounded, so even a paired device cannot fill the disk with reports.
   if ((await readdir(directory)).length >= MAX_DIAGNOSTIC_REPORTS) return reply.code(429).send();
@@ -222,6 +255,9 @@ console.log(`Studio: https://localhost:${port}/control`);
 for (const endpoint of network.snapshot.usb) console.log(`USB sender: ${endpoint.url}/sender#k=${pairingToken} (${endpoint.name})`);
 for (const endpoint of network.snapshot.wifi) console.log(`Wi-Fi sender: ${endpoint.url}/sender#k=${pairingToken} (${endpoint.name})`);
 console.log('USB/Wi-Fi endpoints update automatically every 3 seconds.');
+if (paths.desktop) {
+  console.log(`LENSPIPE_READY ${JSON.stringify({ url: `https://localhost:${port}/control`, port, dataDir: paths.dataDir })}`);
+}
 
 const warnedFirewall = new Set<string>();
 const warnedLinkDown = new Set<string>();
