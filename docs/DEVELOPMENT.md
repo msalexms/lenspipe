@@ -88,10 +88,11 @@ With the server running (`npm start`):
 ```sh
 npm run test:relay     # pages, relay, acknowledgements, control round-trip
 npm run test:ui        # headless Chrome layout checks (CHROME_PATH to pick the browser)
-npm run screenshots    # regenerate docs/screenshots/
 npm run test:audio     # audio playback under bursty delivery
 npm run measure:pc     # PC decode + draw time while streaming
 ```
+
+`npm run screenshots` regenerates the README images in `docs/screenshots/` from a real stream: it starts its own server, and headless Chrome plays the phone with a fake camera showing `scripts/assets/demo-scene.svg`. It needs a build, Chrome and `ffmpeg` (or `FFMPEG`). Addresses and the pairing key shown are demo values.
 
 CI (`.github/workflows/ci.yml`) runs typecheck, unit, desktop and relay tests on every pull request and push to `main`.
 

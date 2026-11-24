@@ -44,7 +44,7 @@
     "test:desktop": "node scripts/test-desktop-server.mjs",
     "test": "npm run test:receiver && npm run test:sps && npm run test:health && npm run test:pairing && npm run test:orientation && npm run test:formats && npm run test:paths && npm run test:cert-trust",
     "test:ui": "node scripts/check-ui.mjs",
-    "screenshots": "node scripts/check-ui.mjs --docs",
+    "screenshots": "node scripts/docs-screenshots.mjs",
     "test:orientation": "tsx scripts/test-orientation.ts",
     "test:formats": "tsx scripts/test-formats.ts"
   },
