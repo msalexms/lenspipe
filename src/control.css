@@ -149,6 +149,8 @@ kbd { margin-left: 4px; padding: 0 5px; border: 1.5px solid currentColor; border
 
 .panel-footer { display: block; margin-top: auto; padding: 10px 2px 0; font: 500 .72rem/1.45 var(--mono); color: var(--gris); }
 .panel-footer > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the encoder line is read as a sentence: wrap it instead of ending it in an ellipsis */
+.panel-footer > #encoder-mode { white-space: normal; overflow: visible; text-overflow: clip; text-wrap: pretty; }
 .footer-brand { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1.5px solid var(--linea); font-family: var(--sans); }
 .panel-footer .signature, .panel-footer .text-link { font-size: .74rem; }
 .text-link { padding: 0; border: 0; background: none; color: var(--tinta); font: 800 .78rem var(--sans); text-decoration: underline; text-underline-offset: 3px; }
@@ -255,6 +257,12 @@ dialog.obs-dialog { width: min(820px, calc(100vw - 32px)); }
 }
 .obs-steps li strong { color: var(--tinta); }
 .obs-trust-card { min-width: 0; margin-top: 0; align-self: start; }
+.obs-trust-card[data-trusted='true'] { background: var(--ams-ok-fondo); }
+.obs-cert-auto { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 10px 0 8px; }
+.obs-cert-auto[hidden], #obs-trust-btn[hidden], #waiting-connect[hidden] { display: none; }
+.obs-manual-details { margin-top: 6px; }
+.obs-manual-details summary { cursor: pointer; font-size: .82rem; font-weight: 800; color: var(--tinta); user-select: none; }
+.obs-manual-details[open] summary { margin-bottom: 6px; }
 .obs-os-tabs { width: 100%; margin: 8px 0 6px; }
 .obs-os-tabs button { min-height: 30px; padding: 0 8px; font-size: .8rem; }
 

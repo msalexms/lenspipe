@@ -54,8 +54,10 @@ async function readStoredSans(sansPath: string): Promise<Set<string> | null> {
   }
 }
 
-export async function ensureCertificate(network: NetworkSnapshot): Promise<CertificateFiles> {
-  const directory = resolve(process.cwd(), 'certs');
+export async function ensureCertificate(
+  network: NetworkSnapshot,
+  directory = resolve(process.cwd(), 'certs'),
+): Promise<CertificateFiles> {
   const keyPath = resolve(directory, 'local-key.pem');
   const certPath = resolve(directory, 'local-cert.pem');
   const sansPath = resolve(directory, 'local-sans.json');
