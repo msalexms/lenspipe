@@ -9,8 +9,41 @@ import { BinarySocket } from './socket';
 import { patchAvcCForLowDelay } from './h264-sps';
 
 const KEYFRAME_RETRY_MS = 1000;
+const MAX_DECODE_QUEUE = 3;
 /** Matches the tier/level field of an HEVC High tier codec string, e.g. `hvc1.1.6.H153.B0`. */
 const HEVC_HIGH_TIER = /^((?:hvc1|hev1)\.[^.]+\.[^.]+\.)H(?=\d)/;
+
+const VERTEX_SHADER_SRC = `#version 300 es
+uniform vec2 u_rot;
+uniform float u_flip;
+out vec2 v_uv;
+void main() {
+  vec2 ndc = vec2(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0);
+  gl_Position = vec4(ndc, 0.0, 1.0);
+  vec2 n = vec2(ndc.x, -ndc.y);
+  vec2 s = vec2((n.x * u_rot.x + n.y * u_rot.y) * u_flip, -n.x * u_rot.y + n.y * u_rot.x);
+  v_uv = s * 0.5 + 0.5;
+}`;
+
+const FRAGMENT_SHADER_SRC = `#version 300 es
+precision mediump float;
+uniform sampler2D u_tex;
+uniform float u_gain;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+  vec4 c = texture(u_tex, v_uv);
+  fragColor = vec4(clamp(c.rgb * u_gain, 0.0, 1.0), 1.0);
+}`;
+
+interface GlRenderer {
+  gl: WebGL2RenderingContext;
+  program: WebGLProgram;
+  texture: WebGLTexture;
+  uRot: WebGLUniformLocation | null;
+  uFlip: WebGLUniformLocation | null;
+  uGain: WebGLUniformLocation | null;
+}
 
 class PcmPlayer {
   private context?: AudioContext;
@@ -92,9 +125,14 @@ class PcmPlayer {
   }
 }
 
+export type VideoPauseReason = 'manual' | 'hidden' | null;
+
 export class StreamReceiver extends EventTarget {
   readonly socket: BinarySocket;
-  private readonly context: CanvasRenderingContext2D;
+  private context2d?: CanvasRenderingContext2D;
+  private glRenderer?: GlRenderer;
+  private glLost = false;
+  private rendererMode: 'idle' | 'webgl2' | '2d' = 'idle';
   private decoder?: VideoDecoder;
   private audio = new PcmPlayer();
   private waitingForKeyframe = true;
@@ -109,6 +147,13 @@ export class StreamReceiver extends EventTarget {
   /** Display rotation/mirroring sent by the iPhone (iOS keeps camera pixels in sensor orientation). */
   private rotation = 0;
   private flip = false;
+  private frameWidth = 0;
+  private frameHeight = 0;
+  private exposureEv = 0;
+  private exposureGain = 1;
+  private manualPaused = false;
+  private pageHidden = false;
+  private videoActive = true;
   private configSignature = '';
   private lastVideoMetadata?: ControlMessage;
   private decodedFrames = 0;
@@ -121,17 +166,43 @@ export class StreamReceiver extends EventTarget {
   private pipelineCount = 0;
   private telemetryTimer: number;
   private resizeObserver?: ResizeObserver;
+  private readonly onVisibilityChange = (): void => {
+    this.pageHidden = Boolean(document.hidden);
+    this.syncVideoSubscription();
+  };
+  private readonly onContextLost = (event: Event): void => {
+    event.preventDefault();
+    this.glLost = true;
+  };
+  private readonly onContextRestored = (): void => {
+    this.glLost = false;
+    if (!this.glRenderer) return;
+    const restored = this.initWebGlRenderer(this.glRenderer.gl);
+    if (restored) {
+      this.glRenderer = restored;
+      this.requestKeyframe();
+    } else {
+      this.glRenderer = undefined;
+    }
+  };
 
-  constructor(private readonly canvas: HTMLCanvasElement, path: '/ws/control' | '/ws/obs') {
+  constructor(private readonly canvas: HTMLCanvasElement, private readonly path: '/ws/control' | '/ws/obs') {
     super();
-    const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
-    if (!context) throw new Error('Canvas 2D is unavailable');
-    this.context = context;
-    if (canvas.parentElement && 'ResizeObserver' in window) {
+    // Auto-pause only /ws/control when backgrounded; OBS CEF OSR can report document.hidden = true while visible on scene.
+    if (this.path === '/ws/control' && typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      this.pageHidden = Boolean(document.hidden);
+      this.videoActive = !this.pageHidden;
+      document.addEventListener('visibilitychange', this.onVisibilityChange);
+    }
+    if (typeof canvas.addEventListener === 'function') {
+      canvas.addEventListener('webglcontextlost', this.onContextLost);
+      canvas.addEventListener('webglcontextrestored', this.onContextRestored);
+    }
+    if (canvas.parentElement && typeof window !== 'undefined' && 'ResizeObserver' in window) {
       this.resizeObserver = new ResizeObserver(() => this.fitCanvas());
       this.resizeObserver.observe(canvas.parentElement);
     }
-    this.socket = new BinarySocket(path);
+    this.socket = new BinarySocket(this.path);
     this.socket.addEventListener('packet', (event) => this.onPacket((event as CustomEvent<ArrayBuffer>).detail));
     this.socket.addEventListener('pairing-required', () => this.dispatchEvent(new Event('pairing-required')));
     this.socket.addEventListener('status', (event) => {
@@ -140,12 +211,62 @@ export class StreamReceiver extends EventTarget {
       if (status === 'online') {
         this.waitingForKeyframe = true;
         this.keyframeRequested = false;
-        this.requestKeyframe();
+        this.socket.sendControl('video-subscription', { enabled: this.videoActive });
+        if (this.videoActive) this.requestKeyframe();
         this.command('request-state');
       }
     });
     this.telemetryTimer = window.setInterval(() => this.reportTelemetry(), 1000);
     this.socket.start();
+  }
+
+  get videoEnabled(): boolean {
+    return this.videoActive;
+  }
+
+  get videoManualPaused(): boolean {
+    return this.manualPaused;
+  }
+
+  get videoPausedReason(): VideoPauseReason {
+    return this.manualPaused ? 'manual' : this.pageHidden ? 'hidden' : null;
+  }
+
+  setVideoEnabled(enabled: boolean): void {
+    this.manualPaused = !enabled;
+    this.syncVideoSubscription();
+  }
+
+  private syncVideoSubscription(): void {
+    const prevActive = this.videoActive;
+    const prevReason = this.videoPausedReason;
+    const nextActive = !this.manualPaused && !this.pageHidden;
+    this.videoActive = nextActive;
+    const nextReason = this.videoPausedReason;
+
+    if (nextActive !== prevActive) {
+      this.socket.sendControl('video-subscription', { enabled: nextActive });
+      if (!nextActive) {
+        this.waitingForKeyframe = true;
+        this.keyframeRequested = false;
+        this.arrivals.clear();
+        this.framesThisSecond = 0;
+        this.decoder?.close();
+        this.decoder = undefined;
+        this.configSignature = '';
+      } else {
+        this.waitingForKeyframe = true;
+        this.keyframeRequested = false;
+        if (this.lastVideoMetadata) this.configureVideo(this.lastVideoMetadata);
+        else this.requestKeyframe();
+      }
+    }
+
+    if (nextActive !== prevActive || nextReason !== prevReason) {
+      this.dispatchEvent(new CustomEvent('video-state', {
+        detail: { enabled: nextActive, manualPaused: this.manualPaused, reason: nextReason },
+      }));
+    }
   }
 
   command(command: string, payload: Record<string, unknown> = {}): void {
@@ -212,9 +333,15 @@ export class StreamReceiver extends EventTarget {
   }
 
   private applyExposureFilter(ev: number): void {
-    if (!this.canvas.style) return;
     const clamped = Math.max(-2, Math.min(2, Number(ev) || 0));
-    this.canvas.style.filter = clamped === 0 ? '' : `brightness(${Math.pow(2, clamped * 0.5).toFixed(3)})`;
+    this.exposureEv = clamped;
+    this.exposureGain = clamped === 0 ? 1 : Math.pow(2, clamped * 0.5);
+    if (!this.canvas.style) return;
+    if (this.glRenderer) {
+      this.canvas.style.filter = '';
+      return;
+    }
+    this.canvas.style.filter = clamped === 0 ? '' : `brightness(${this.exposureGain.toFixed(3)})`;
   }
 
   private configureVideo(metadata: ControlMessage): void {
@@ -224,6 +351,7 @@ export class StreamReceiver extends EventTarget {
     const orientation = metadata.orientation as { rotation?: number; flip?: boolean } | undefined;
     this.rotation = normalizeRotation(orientation?.rotation);
     this.flip = Boolean(orientation?.flip);
+    if (!this.videoActive) return;
     const config = videoConfigFromWire(rawConfig as Record<string, unknown>);
     // Orientation is applied once, when drawing. Should an encoder also put it in the decoder config,
     // a browser that honours it would rotate the frames a second time.
@@ -285,6 +413,7 @@ export class StreamReceiver extends EventTarget {
   }
 
   private requestKeyframe(): void {
+    if (!this.videoActive) return;
     // Re-ask if the previous request went unanswered (e.g. sent while the iPhone was reconnecting).
     const now = performance.now();
     if (this.keyframeRequested && now - this.lastKeyframeRequestAt < KEYFRAME_RETRY_MS) return;
@@ -299,18 +428,19 @@ export class StreamReceiver extends EventTarget {
     this.decoder?.close();
     this.decoder = undefined;
     this.configSignature = '';
+    if (!this.videoActive) return;
     if (this.lastVideoMetadata) this.configureVideo(this.lastVideoMetadata);
     this.requestKeyframe();
   }
 
   private decodeVideo(keyframe: boolean, timestamp: number, data: Uint8Array): void {
-    if (!this.decoder || this.decoder.state !== 'configured') return;
+    if (!this.videoActive || !this.decoder || this.decoder.state !== 'configured') return;
     if (this.waitingForKeyframe && !keyframe) {
       this.droppedFrames++;
       this.requestKeyframe();
       return;
     }
-    if (!keyframe && this.decoder.decodeQueueSize > 6) {
+    if (!keyframe && this.decoder.decodeQueueSize > MAX_DECODE_QUEUE) {
       this.droppedFrames++;
       // Drop congested deltas and wait for a fresh keyframe without tearing down the hardware decoder.
       this.waitingForKeyframe = true;
@@ -339,29 +469,167 @@ export class StreamReceiver extends EventTarget {
     }
   }
 
+  private compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
+    const shader = gl.createShader(type);
+    if (!shader) return null;
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.warn('WebGL2 shader compile error', gl.getShaderInfoLog(shader));
+      gl.deleteShader(shader);
+      return null;
+    }
+    return shader;
+  }
+
+  private initWebGlRenderer(gl: WebGL2RenderingContext): GlRenderer | null {
+    const vs = this.compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER_SRC);
+    const fs = this.compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER_SRC);
+    if (!vs || !fs) {
+      if (vs) gl.deleteShader(vs);
+      if (fs) gl.deleteShader(fs);
+      return null;
+    }
+    const program = gl.createProgram();
+    if (!program) {
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      return null;
+    }
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.warn('WebGL2 program link error', gl.getProgramInfoLog(program));
+      gl.deleteProgram(program);
+      return null;
+    }
+    const texture = gl.createTexture();
+    if (!texture) {
+      gl.deleteProgram(program);
+      return null;
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+    gl.useProgram(program);
+    const uTex = gl.getUniformLocation(program, 'u_tex');
+    if (uTex) gl.uniform1i(uTex, 0);
+    return {
+      gl,
+      program,
+      texture,
+      uRot: gl.getUniformLocation(program, 'u_rot'),
+      uFlip: gl.getUniformLocation(program, 'u_flip'),
+      uGain: gl.getUniformLocation(program, 'u_gain'),
+    };
+  }
+
+  /** Acquires the GPU/2D context lazily on the first decoded frame so pre-stream UI tools stay compatible. */
+  private ensureRenderer(): 'webgl2' | '2d' {
+    if (this.glRenderer) return 'webgl2';
+    if (this.context2d) return '2d';
+    const maybeGl = this.canvas.getContext('webgl2', {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: false,
+      desynchronized: true,
+    } as WebGLContextAttributes) as WebGL2RenderingContext | null;
+    if (maybeGl && typeof maybeGl.createShader === 'function' && typeof maybeGl.texImage2D === 'function') {
+      const renderer = this.initWebGlRenderer(maybeGl);
+      if (renderer) {
+        this.glRenderer = renderer;
+        this.rendererMode = 'webgl2';
+        if (this.canvas.style) this.canvas.style.filter = '';
+        return 'webgl2';
+      }
+    }
+    const context = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
+    if (!context) throw new Error('Canvas 2D is unavailable');
+    this.context2d = context;
+    this.rendererMode = '2d';
+    this.applyExposureFilter(this.exposureEv);
+    return '2d';
+  }
+
+  private drawWebGl(frame: VideoFrame): void {
+    const renderer = this.glRenderer;
+    if (!renderer || this.glLost || renderer.gl.isContextLost()) return;
+    const { gl, program, texture, uRot, uFlip, uGain } = renderer;
+    gl.viewport(0, 0, gl.drawingBufferWidth || this.canvas.width, gl.drawingBufferHeight || this.canvas.height);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame as unknown as TexImageSource);
+    const radians = (this.rotation * Math.PI) / 180;
+    gl.useProgram(program);
+    if (uRot) gl.uniform2f(uRot, Math.cos(radians), Math.sin(radians));
+    if (uFlip) gl.uniform1f(uFlip, this.flip ? -1 : 1);
+    if (uGain) gl.uniform1f(uGain, this.exposureGain);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  private syncWebGlBufferSize(cssWidth?: number, cssHeight?: number): void {
+    if (!this.glRenderer || !this.frameWidth || !this.frameHeight) return;
+    const dpr = typeof window !== 'undefined' ? Math.max(1, Number(window.devicePixelRatio) || 1) : 1;
+    let targetWidth = this.frameWidth;
+    let targetHeight = this.frameHeight;
+    if (cssWidth && cssHeight && cssWidth > 0 && cssHeight > 0) {
+      targetWidth = Math.max(1, Math.min(this.frameWidth, Math.round(cssWidth * dpr)));
+      targetHeight = Math.max(1, Math.min(this.frameHeight, Math.round(cssHeight * dpr)));
+    }
+    if (this.canvas.width !== targetWidth || this.canvas.height !== targetHeight) {
+      this.canvas.width = targetWidth;
+      this.canvas.height = targetHeight;
+    }
+  }
+
   private draw(frame: VideoFrame): void {
     try {
+      const mode = this.ensureRenderer();
       const width = frame.displayWidth;
       const height = frame.displayHeight;
       const quarterTurn = this.rotation === 90 || this.rotation === 270;
       const outWidth = quarterTurn ? height : width;
       const outHeight = quarterTurn ? width : height;
-      if (this.canvas.width !== outWidth || this.canvas.height !== outHeight) {
-        this.canvas.width = outWidth;
-        this.canvas.height = outHeight;
-        this.canvas.dataset.orientation = outWidth >= outHeight ? 'landscape' : 'portrait';
-        this.canvas.style.aspectRatio = `${outWidth} / ${outHeight}`;
+      const frameResized = this.frameWidth !== outWidth || this.frameHeight !== outHeight;
+      this.frameWidth = outWidth;
+      this.frameHeight = outHeight;
+      if (frameResized) {
+        if (this.canvas.dataset) this.canvas.dataset.orientation = outWidth >= outHeight ? 'landscape' : 'portrait';
+        if (this.canvas.style) this.canvas.style.aspectRatio = `${outWidth} / ${outHeight}`;
         this.fitCanvas();
       }
-      if (this.rotation || this.flip) {
-        // Turn the sensor-oriented frame the same way the iPhone's own preview does.
-        this.context.setTransform(1, 0, 0, 1, outWidth / 2, outHeight / 2);
-        this.context.rotate((this.rotation * Math.PI) / 180);
-        if (this.flip) this.context.scale(-1, 1);
-        this.context.drawImage(frame, -width / 2, -height / 2, width, height);
-        this.context.setTransform(1, 0, 0, 1, 0, 0);
+      if (mode === 'webgl2') {
+        if (frameResized) {
+          const rectSize = this.displayedSize();
+          this.syncWebGlBufferSize(rectSize?.width, rectSize?.height);
+        }
+        this.drawWebGl(frame);
       } else {
-        this.context.drawImage(frame, 0, 0, width, height);
+        const ctx = this.context2d!;
+        if (this.canvas.width !== outWidth || this.canvas.height !== outHeight) {
+          this.canvas.width = outWidth;
+          this.canvas.height = outHeight;
+        }
+        if (this.rotation || this.flip) {
+          // Turn the sensor-oriented frame the same way the iPhone's own preview does.
+          ctx.setTransform(1, 0, 0, 1, outWidth / 2, outHeight / 2);
+          ctx.rotate((this.rotation * Math.PI) / 180);
+          if (this.flip) ctx.scale(-1, 1);
+          ctx.drawImage(frame, -width / 2, -height / 2, width, height);
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+        } else {
+          ctx.drawImage(frame, 0, 0, width, height);
+        }
       }
       const arrivedAt = this.arrivals.get(frame.timestamp);
       if (arrivedAt !== undefined) {
@@ -394,6 +662,8 @@ export class StreamReceiver extends EventTarget {
       decoderQueue: this.decoder?.decodeQueueSize || 0,
       pipelineMs,
       pipelineMaxMs,
+      renderer: this.rendererMode,
+      videoEnabled: this.videoActive,
     };
     this.socket.sendControl('receiver-telemetry', stats);
     this.dispatchEvent(new CustomEvent('local-telemetry', {
@@ -402,26 +672,51 @@ export class StreamReceiver extends EventTarget {
     this.audioChunks = 0;
   }
 
-  fitCanvas(): void {
+  private displayedSize(): { width: number; height: number } | null {
     const parent = this.canvas.parentElement;
-    const fw = this.canvas.width;
-    const fh = this.canvas.height;
-    if (!parent || !fw || !fh) return;
+    const fw = this.frameWidth || this.canvas.width;
+    const fh = this.frameHeight || this.canvas.height;
+    if (!parent || !fw || !fh) return null;
     const cw = parent.clientWidth;
     const ch = parent.clientHeight;
-    if (!cw || !ch) return;
+    if (!cw || !ch) return null;
     const frameRatio = fw / fh;
     const boxRatio = cw / ch;
     const width = boxRatio > frameRatio ? ch * frameRatio : cw;
     const height = boxRatio > frameRatio ? ch : cw / frameRatio;
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
+    return { width, height };
+  }
+
+  fitCanvas(): void {
+    const size = this.displayedSize();
+    if (!size) {
+      if (this.glRenderer && this.frameWidth && this.frameHeight) this.syncWebGlBufferSize();
+      return;
+    }
+    this.canvas.style.width = `${size.width}px`;
+    this.canvas.style.height = `${size.height}px`;
+    this.syncWebGlBufferSize(size.width, size.height);
   }
 
   close(): void {
     window.clearInterval(this.telemetryTimer);
+    if (this.path === '/ws/control' && typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    }
+    if (typeof this.canvas.removeEventListener === 'function') {
+      this.canvas.removeEventListener('webglcontextlost', this.onContextLost);
+      this.canvas.removeEventListener('webglcontextrestored', this.onContextRestored);
+    }
     this.resizeObserver?.disconnect();
     this.decoder?.close();
+    if (this.glRenderer) {
+      const { gl, texture, program } = this.glRenderer;
+      if (!gl.isContextLost()) {
+        gl.deleteTexture(texture);
+        gl.deleteProgram(program);
+      }
+      this.glRenderer = undefined;
+    }
     this.audio.close();
     this.socket.stop();
   }

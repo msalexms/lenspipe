@@ -159,8 +159,9 @@ Upgrading from an older certificate without name constraints regenerates `certs/
 
 ### PC studio (`/control`)
 
-- **Live preview & remote panel:** click anywhere on the canvas to trigger point/pass autofocus, press `K` (or **Force keyframe**) for an immediate keyframe, toggle **Preview audio: on/off** (adaptive jitter buffer: starts at `60 ms`, steps `+20 ms` up to `250 ms` on dropouts, shrinks back after `5 s`), and inspect **Settings** or **About** (`ⓘ`).
-- **Telemetry & PC latency:** live transport (`USB` / `Wi-Fi`), RTT, relay input bitrate, FPS, encoder/decoder queue depths, PC decode+draw time (`npm run measure:pc` measures it from CLI while streaming), decoded frames, and drops.
+- **Live preview & OBS mode:** click anywhere on the canvas to trigger point/pass autofocus, press `K` (or **Force keyframe**) for an immediate keyframe, toggle **Preview audio: on/off** (adaptive jitter buffer: starts at `60 ms`, steps `+20 ms` up to `250 ms` on dropouts, shrinks back after `5 s`), or click **Pause preview** to suspend local studio video decoding (`video-subscription: false`) while keeping OBS and remote camera controls live. Minimizing or hiding the `/control` tab pauses local video decoding automatically (while `/obs` stays always active).
+- **WebGL2 zero-copy pipeline:** `StreamReceiver` (`src/receiver.ts`) renders `VideoFrame` directly via WebGL2 shaders (rotation, mirror flip, and `softwareEv` brightness) with automatic Canvas 2D fallback and tighter decode queue limits (`> 3` frames), matching the backing buffer size to the active viewport/OBS source.
+- **Telemetry & OBS status:** live transport (`USB` / `Wi-Fi`), RTT, relay input bitrate, FPS, encoder/decoder queue depths, PC decode+draw time (`npm run measure:pc` measures it from CLI while streaming), decoded frames, drops, and a live **OBS** status pill (`OBS · FPS · ms`) whenever `/obs` is connected.
 - **iOS Realtime note:** iOS Safari caps `realtime` mode near ~`15 Mbps`, whereas `quality` mode unlocks full requested bitrates at ~`11 ms` lookahead cost on iPhone.
 
 ---
@@ -173,8 +174,12 @@ Upgrading from an older certificate without name constraints regenerates `certs/
    https://192.168.1.20:8443/obs
    ```
    *(Shift-click **OBS source** to open `/obs` directly in a browser tab.)*
-3. Set OBS Browser width and height to match your scene canvas (e.g. `1920 × 1080`), and optionally enable **Refresh browser when scene becomes active**.
+3. Set OBS Browser width and height to your scene canvas (e.g. `1920 × 1080` or `3840 × 2160` — WebGL2 scales cleanly to the source size), check **Use custom frame rate** at `60` (or match your OBS canvas FPS), and leave Custom CSS empty.
 4. Enable **Control audio via OBS** if you want the phone mic routed to OBS's audio mixer (click the view once if OBS suspends Web Audio).
+5. For maximum quality and lowest latency in OBS:
+   - Keep **Settings → Advanced → Sources → Enable Browser Source Hardware Acceleration** enabled.
+   - Check **Shutdown source when not visible** on the Browser Source when switching between scenes.
+   - Minimize the `/control` browser window or click **Pause preview** so OBS gets the full GPU hardware decoder without keyframe storms from a throttled background tab. If OBS's embedded Chromium struggles with HEVC, switch **Codec** to **H.264 High**.
 
 If OBS's embedded Chromium rejects the local self-signed HTTPS certificate, trust `certs/local-cert.pem` on the PC running OBS and restart OBS completely (**OBS source** in `/control` pre-fills the command with the exact full path):
 

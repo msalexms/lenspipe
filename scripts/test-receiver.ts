@@ -3,11 +3,26 @@ import assert from 'node:assert/strict';
 class FakeWebSocket extends EventTarget {
   static OPEN = 1;
   static CONNECTING = 0;
+  static instances: FakeWebSocket[] = [];
   readyState = 0;
   binaryType = '';
   bufferedAmount = 0;
+  sentControl: Array<Record<string, unknown>> = [];
+  constructor() {
+    super();
+    FakeWebSocket.instances.push(this);
+  }
   addEventListener(type: string, listener: EventListener): void { super.addEventListener(type, listener); }
-  send(): void {}
+  open(): void {
+    this.readyState = FakeWebSocket.OPEN;
+    this.dispatchEvent(new Event('open'));
+  }
+  send(data: ArrayBuffer): void {
+    const bytes = new Uint8Array(data);
+    if (bytes[0] === 0x10) {
+      this.sentControl.push(JSON.parse(new TextDecoder().decode(bytes.subarray(1))) as Record<string, unknown>);
+    }
+  }
   close(): void { this.readyState = 3; }
 }
 
@@ -122,5 +137,89 @@ highTier.emitFatalError();
 await new Promise<void>((resolve) => queueMicrotask(resolve));
 assert.equal((FakeVideoDecoder.instances.at(-1)!.config as any).codec, 'hvc1.1.6.L153.B0', 'High tier must fall back to Main tier');
 
+// Tighter decode queue bound: <= 3 is decoded, > 3 triggers delta drop & keyframe wait.
+receiver.configureVideo(metadata);
+const queueDecoder = FakeVideoDecoder.instances.at(-1)!;
+receiver.decodeVideo(true, 200, bytes);
+queueDecoder.decodeQueueSize = 3;
+receiver.decodeVideo(false, 201, bytes);
+assert.equal(queueDecoder.decoded.length, 2, 'decodeQueueSize === 3 must still decode');
+queueDecoder.decodeQueueSize = 4;
+receiver.decodeVideo(false, 202, bytes);
+assert.equal(queueDecoder.decoded.length, 2, 'decodeQueueSize > 3 must drop delta');
+assert.equal(receiver.waitingForKeyframe, true, 'dropping at queue > 3 waits for next keyframe');
+queueDecoder.decodeQueueSize = 0;
+receiver.decodeVideo(true, 203, bytes);
+assert.equal(queueDecoder.decoded.length, 3);
+
+// Manual preview pause / resume: sends video-subscription, closes decoder, suppresses keyframes while paused.
+const mainWs = FakeWebSocket.instances[0];
+mainWs.open();
+mainWs.sentControl.length = 0;
+const dropsBeforePause = receiver.droppedFrames;
+const decoderBeforePause = FakeVideoDecoder.instances.at(-1)!;
+receiver.setVideoEnabled(false);
+assert.equal(receiver.videoEnabled, false);
+assert.equal(decoderBeforePause.state, 'closed', 'pausing closes the active VideoDecoder to free GPU resources');
+assert.deepEqual(mainWs.sentControl, [{ type: 'video-subscription', enabled: false }]);
+mainWs.sentControl.length = 0;
+receiver.decodeVideo(false, 204, bytes);
+receiver.decodeVideo(true, 205, bytes);
+assert.equal(receiver.droppedFrames, dropsBeforePause, 'frames ignored while paused must not count as drops');
+assert.equal(mainWs.sentControl.length, 0, 'paused receiver must never request keyframes');
+const decodersCountBeforeResume = FakeVideoDecoder.instances.length;
+receiver.setVideoEnabled(true);
+assert.equal(receiver.videoEnabled, true);
+assert.equal(FakeVideoDecoder.instances.length, decodersCountBeforeResume + 1, 'resuming reconfigures decoder from cache');
+assert.deepEqual(mainWs.sentControl, [
+  { type: 'video-subscription', enabled: true },
+  { type: 'command', command: 'force-keyframe' },
+]);
+
 receiver.close();
-console.log('Decoder regression test passed: fatal errors rebuild, dropped deltas purge references, keyframes restore decoding, rotation is applied once when drawing, and HEVC High tier falls back to Main tier.');
+
+// Auto-pause on document.hidden: /ws/control follows visibilitychange, while /ws/obs NEVER auto-pauses.
+class FakeDocument extends EventTarget {
+  hidden = false;
+}
+const fakeDoc = new FakeDocument();
+Object.assign(globalThis, { document: fakeDoc });
+
+const bgControl = new StreamReceiver(canvas, '/ws/control') as any;
+const bgControlWs = FakeWebSocket.instances.at(-1)!;
+bgControlWs.open();
+bgControl.configureVideo(metadata);
+bgControl.decodeVideo(true, 300, bytes);
+bgControlWs.sentControl.length = 0;
+
+fakeDoc.hidden = true;
+fakeDoc.dispatchEvent(new Event('visibilitychange'));
+assert.equal(bgControl.videoEnabled, false, '/ws/control must auto-pause when page is hidden');
+assert.deepEqual(bgControlWs.sentControl, [{ type: 'video-subscription', enabled: false }]);
+bgControlWs.sentControl.length = 0;
+bgControl.decodeVideo(false, 301, bytes);
+assert.equal(bgControlWs.sentControl.length, 0, 'hidden /ws/control must not fire keyframe requests');
+
+fakeDoc.hidden = false;
+fakeDoc.dispatchEvent(new Event('visibilitychange'));
+assert.equal(bgControl.videoEnabled, true, '/ws/control must resume when visible again');
+assert.ok(bgControlWs.sentControl.some((msg) => msg.type === 'video-subscription' && msg.enabled === true));
+
+// Manual pause stays respected across tab visibility transitions.
+bgControl.setVideoEnabled(false);
+fakeDoc.hidden = true;
+fakeDoc.dispatchEvent(new Event('visibilitychange'));
+fakeDoc.hidden = false;
+fakeDoc.dispatchEvent(new Event('visibilitychange'));
+assert.equal(bgControl.videoEnabled, false, 'manual pause stays paused after visibility returns');
+bgControl.close();
+
+const obsReceiver = new StreamReceiver(canvas, '/ws/obs') as any;
+FakeWebSocket.instances.at(-1)!.open();
+obsReceiver.configureVideo(metadata);
+fakeDoc.hidden = true;
+fakeDoc.dispatchEvent(new Event('visibilitychange'));
+assert.equal(obsReceiver.videoEnabled, true, '/ws/obs must never auto-pause when document.hidden is true (OBS OSR)');
+obsReceiver.close();
+
+console.log('Decoder regression test passed: fatal errors rebuild, dropped deltas purge references, queue > 3 drops cleanly, keyframes restore decoding, rotation is applied once when drawing, HEVC High tier falls back to Main tier, and pause/background subscriptions behave properly.');
