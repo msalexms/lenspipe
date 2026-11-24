@@ -25,6 +25,11 @@
   "scripts": {
     "dev": "concurrently -k -n server,web \"tsx watch server/index.ts\" \"vite build --watch\"",
     "build": "tsc -p tsconfig.server.json && vite build",
+    "build:sidecar": "node scripts/build-sidecar.mjs",
+    "desktop:icon": "node scripts/generate-app-icon.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "start": "node dist-server/index.js",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.json --noEmit",
     "test:relay": "node scripts/smoke-relay.mjs",
@@ -34,7 +39,9 @@
     "measure:pc": "node scripts/measure-pc.mjs",
     "test:audio": "node scripts/test-audio.mjs",
     "test:pairing": "tsx scripts/test-pairing.ts",
-    "test": "npm run test:receiver && npm run test:sps && npm run test:health && npm run test:pairing && npm run test:orientation && npm run test:formats",
+    "test:paths": "tsx scripts/test-paths.ts",
+    "test:cert-trust": "tsx scripts/test-cert-trust.ts",
+    "test": "npm run test:receiver && npm run test:sps && npm run test:health && npm run test:pairing && npm run test:orientation && npm run test:formats && npm run test:paths && npm run test:cert-trust",
     "test:ui": "node scripts/check-ui.mjs",
     "screenshots": "node scripts/check-ui.mjs --docs",
     "test:orientation": "tsx scripts/test-orientation.ts",
@@ -48,12 +55,14 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.6",
     "@types/dom-webcodecs": "^0.1.11",
     "@types/node": "^22.10.5",
     "@types/qrcode": "^1.5.5",
     "@types/selfsigned": "^2.0.0",
     "@types/ws": "^8.5.13",
     "concurrently": "^9.1.2",
+    "postject": "^1.0.0-alpha.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vite": "^6.0.7"
