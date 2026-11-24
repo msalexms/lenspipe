@@ -1,0 +1,15 @@
+@import './shared.css';
+
+body { padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left)); }
+main { max-width: 720px; margin: 0 auto; }
+h1 { font: 800 1.8rem/1.1 var(--titulos); letter-spacing: -.02em; margin: 6px 0 8px; }
+p { color: var(--tinta2); font-size: .9rem; }
+#run { width: 100%; margin: 18px 0 10px; min-height: 44px; }
+#status { font-size: .8rem; color: var(--gris); min-height: 1.5em; }
+table { width: 100%; margin-top: 14px; border-collapse: collapse; font-size: .74rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 6px; border-bottom: 1px solid var(--linea2); text-align: left; white-space: nowrap; }
+th { font-weight: 600; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; font-size: .66rem; }
+td.ok { color: var(--bien); }
+td.no { color: var(--gris); }
+.scroll { overflow-x: auto; }
+video { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

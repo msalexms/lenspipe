@@ -4,7 +4,6 @@
  * the bare URL keeps working, and removed from the address bar.
  */
 const STORAGE_KEY = 'lenspipe.pairing-token';
-const LEGACY_STORAGE_KEY = 'camera-link.pairing-token';
 let cached: string | null | undefined;
 
 export function pairingToken(): string | null {
@@ -18,13 +17,6 @@ export function pairingToken(): string | null {
   }
   try {
     cached = localStorage.getItem(STORAGE_KEY);
-    if (!cached) {
-      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (legacy) {
-        cached = legacy;
-        try { localStorage.setItem(STORAGE_KEY, legacy); } catch { /* ignore */ }
-      }
-    }
   } catch { cached = null; }
   return cached;
 }

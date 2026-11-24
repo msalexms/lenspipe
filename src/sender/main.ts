@@ -10,7 +10,7 @@ import {
   type ControlMessage,
 } from '../protocol';
 import { BinarySocket } from '../socket';
-import { paintRange, watchRanges } from '../amstech-ui';
+import { $, closeOnBackdropClick, paintRange, watchRanges } from '../amstech-ui';
 import {
   CODEC_H264,
   CODEC_HEVC,
@@ -45,7 +45,6 @@ import {
 } from '../stream-settings';
 import { HealthBanner, HealthMonitor } from '../health';
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 /** Turns getUserMedia(audio) failures into something actionable on mobile browsers. */
 function microphoneErrorMessage(error: unknown): string {
@@ -94,7 +93,6 @@ function interfaceOrientation(): number {
 }
 const MIN_FORCED_KEYFRAME_GAP_MS = 250;
 const PREFERENCES_KEY = 'lenspipe:stream-settings';
-const LEGACY_PREFERENCES_KEY = 'camera-link:stream-settings';
 
 interface EncoderCandidate {
   config: VideoEncoderConfig & Record<string, unknown>;
@@ -106,11 +104,18 @@ interface EncoderCandidate {
 
 function loadPreferences(): Partial<StreamSettings> {
   try {
-    const stored = localStorage.getItem(PREFERENCES_KEY) ?? localStorage.getItem(LEGACY_PREFERENCES_KEY);
+    const stored = localStorage.getItem(PREFERENCES_KEY);
     return sanitizeSettings(JSON.parse(stored || '{}'));
   } catch {
     return {};
   }
+}
+
+/** The route to the PC as the pill shows it. */
+function transportLabel(transport: string): string {
+  if (transport === 'USB' || transport === 'Wi-Fi') return transport;
+  if (transport === 'Local') return 'This PC';
+  return 'Connecting';
 }
 
 class CameraSender {
@@ -223,7 +228,6 @@ class CameraSender {
   private transport = 'Unknown';
   private sentBytes = 0;
   private sentFrames = 0;
-  private displayedFps = 0;
   private droppedFrames = 0;
   private wakeLock?: WakeLockSentinel;
   private silentAudio = document.createElement('audio');
@@ -247,11 +251,11 @@ class CameraSender {
       if (this.started) this.toast('Connected to PC');
     });
     this.socket.addEventListener('status', (event) => {
-      if ((event as CustomEvent<string>).detail === 'offline') $('transport').textContent = 'OFFLINE';
+      if ((event as CustomEvent<string>).detail === 'offline') $('transport').textContent = 'Offline';
     });
     this.socket.addEventListener('pairing-required', () => {
       const message = 'This phone is not paired. Scan the QR code shown in the PC studio (Connect phone) again.';
-      $('transport').textContent = 'NOT PAIRED';
+      $('transport').textContent = 'Not paired';
       const note = $('start-note');
       note.textContent = message;
       note.classList.add('error');
@@ -354,14 +358,7 @@ class CameraSender {
       });
     });
     $('open-settings').addEventListener('click', () => $<HTMLDialogElement>('settings-sheet').showModal());
-    const settingsSheet = $<HTMLDialogElement>('settings-sheet');
-    settingsSheet.addEventListener('click', (event) => {
-      if (event.target !== settingsSheet || event.detail === 0) return;
-      const rect = settingsSheet.getBoundingClientRect();
-      const inside = event.clientX >= rect.left && event.clientX <= rect.right
-        && event.clientY >= rect.top && event.clientY <= rect.bottom;
-      if (!inside) settingsSheet.close();
-    });
+    closeOnBackdropClick($<HTMLDialogElement>('settings-sheet'));
     $('profile-max-quality').addEventListener('click', () => this.applyProfile('max-quality'));
     $('profile-low-latency').addEventListener('click', () => this.applyProfile('low-latency'));
     $<HTMLSelectElement>('rate-control').addEventListener('change', (event) => {
@@ -378,8 +375,17 @@ class CameraSender {
       this.scheduleZoom(Number(input.value));
     });
     $('torch').addEventListener('click', () => void this.setTorch(!this.torch));
-    $('mic').addEventListener('click', () => this.enqueue(() => this.setMicrophone(!this.micEnabled)));
-    $('mute').addEventListener('click', () => this.setMute(!this.muted));
+    // One key for the mic: off → live → off; when the studio muted it, a tap unmutes.
+    $('mic').addEventListener('click', () => {
+      if (this.micEnabled && this.muted) this.setMute(false);
+      else this.enqueue(() => this.setMicrophone(!this.micEnabled));
+    });
+    $('telemetry').addEventListener('click', (event) => {
+      const pill = event.currentTarget as HTMLElement;
+      const expanded = pill.getAttribute('aria-expanded') !== 'true';
+      pill.setAttribute('aria-expanded', String(expanded));
+      pill.title = expanded ? 'Hide stream details' : 'Show stream details';
+    });
     $('blackout').addEventListener('click', () => this.enableBlackout());
     this.bindBlackoutExit();
     this.bindTapToFocus();
@@ -1522,13 +1528,8 @@ class CameraSender {
     }
   }
 
-  private async applyTrackConstraint(property: 'zoom' | 'focusMode' | 'exposureMode', value: number | string): Promise<void> {
+  private async applyTrackConstraint(property: 'focusMode' | 'exposureMode', mode: string): Promise<void> {
     if (!this.track) return;
-    if (property === 'zoom') {
-      this.scheduleZoom(Number(value));
-      return;
-    }
-    const mode = String(value);
     if (property === 'focusMode') this.focusMode = mode;
     else this.exposureMode = mode;
 
@@ -1850,71 +1851,70 @@ class CameraSender {
       this.reportMicProblem(microphoneErrorMessage(error));
       throw new Error(this.micProblem ?? 'Microphone failed');
     } finally {
-      const micButton = $('mic');
-      micButton.classList.toggle('active', this.micEnabled);
-      micButton.setAttribute('aria-pressed', String(this.micEnabled));
-      micButton.textContent = this.micEnabled ? 'Mic on' : 'Mic off';
-      const muteButton = $<HTMLButtonElement>('mute');
-      const mutedActive = this.micEnabled && this.muted;
-      muteButton.classList.toggle('active', mutedActive);
-      muteButton.setAttribute('aria-pressed', String(mutedActive));
-      muteButton.textContent = mutedActive ? 'Muted' : 'Mute';
-      muteButton.disabled = !this.micEnabled;
-      $<HTMLSelectElement>('mic-device').disabled = !this.micEnabled;
+      this.updateMicUi();
       this.sendState();
     }
   }
 
+  private updateMicUi(): void {
+    const state = !this.micEnabled ? 'off' : this.muted ? 'muted' : 'live';
+    const micButton = $('mic');
+    micButton.classList.toggle('active', state === 'live');
+    micButton.classList.toggle('muted', state === 'muted');
+    micButton.classList.toggle('ico-mic', state === 'live');
+    micButton.classList.toggle('ico-mute', state !== 'live');
+    micButton.setAttribute('aria-pressed', String(this.micEnabled));
+    micButton.textContent = { off: 'Mic off', live: 'Mic live', muted: 'Muted' }[state];
+    micButton.title = {
+      off: 'Turn the microphone on',
+      live: 'Turn the microphone off',
+      muted: 'Muted from the studio: tap to unmute',
+    }[state];
+    $<HTMLSelectElement>('mic-device').disabled = !this.micEnabled;
+  }
+
   private async startAudio(): Promise<void> {
+    this.micStream = await navigator.mediaDevices.getUserMedia({
+      video: false,
+      audio: {
+        deviceId: this.selectedMicrophone ? { exact: this.selectedMicrophone } : undefined,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 1,
+      },
+    });
+    const settings = this.micStream.getAudioTracks()[0].getSettings();
+    this.selectedMicrophone = settings.deviceId || this.selectedMicrophone;
     try {
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: {
-          deviceId: this.selectedMicrophone ? { exact: this.selectedMicrophone } : undefined,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: 1,
-        },
-      });
-      const settings = this.micStream.getAudioTracks()[0].getSettings();
-      this.selectedMicrophone = settings.deviceId || this.selectedMicrophone;
-      try {
-        this.audioContext = new AudioContext({ sampleRate: settings.sampleRate || 48000, latencyHint: 'interactive' });
-      } catch {
-        this.audioContext = new AudioContext({ latencyHint: 'interactive' });
-      }
-      await this.audioContext.audioWorklet.addModule('/pcm-capture-worklet.js');
-      const source = this.audioContext.createMediaStreamSource(this.micStream);
-      this.audioNode = new AudioWorkletNode(this.audioContext, 'pcm-capture', { numberOfInputs: 1, numberOfOutputs: 1 });
-      const sink = this.audioContext.createGain();
-      sink.gain.value = 0;
-      source.connect(this.audioNode).connect(sink).connect(this.audioContext.destination);
-      this.audioNode.port.onmessage = (event: MessageEvent<{ samples: ArrayBuffer; peak: number; timestamp: number }>) => {
-        const samples = new Float32Array(event.data.samples);
-        this.audioPeak = event.data.peak;
-        if (!this.micEnabled || this.muted || !this.socket.isOpen) return;
-        const pcm = new Int16Array(samples.length);
-        for (let i = 0; i < samples.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
-        if (this.socket.send(encodePcmChunk(event.data.timestamp, pcm))) this.audioPacketsSent++;
-      };
-      const audioConfigPacket = encodeJsonPacket(PACKET.AUDIO_CONFIG, {
-        decoderConfig: { codec: 'pcm-s16le', sampleRate: this.audioContext.sampleRate, numberOfChannels: 1 },
-        sampleRate: this.audioContext.sampleRate,
-        channels: 1,
-        bitsPerSample: 16,
-      });
-      this.lastAudioConfigPacket = audioConfigPacket;
-      this.socket.send(audioConfigPacket);
-      this.micEnabled = true;
-      await this.ensureAudioRunning();
-    } catch (error) {
-      this.micEnabled = false;
-      this.stopAudio();
-      this.syncUi();
-      this.sendState();
-      throw error;
+      this.audioContext = new AudioContext({ sampleRate: settings.sampleRate || 48000, latencyHint: 'interactive' });
+    } catch {
+      this.audioContext = new AudioContext({ latencyHint: 'interactive' });
     }
+    await this.audioContext.audioWorklet.addModule('/pcm-capture-worklet.js');
+    const source = this.audioContext.createMediaStreamSource(this.micStream);
+    this.audioNode = new AudioWorkletNode(this.audioContext, 'pcm-capture', { numberOfInputs: 1, numberOfOutputs: 1 });
+    const sink = this.audioContext.createGain();
+    sink.gain.value = 0;
+    source.connect(this.audioNode).connect(sink).connect(this.audioContext.destination);
+    this.audioNode.port.onmessage = (event: MessageEvent<{ samples: ArrayBuffer; peak: number; timestamp: number }>) => {
+      const samples = new Float32Array(event.data.samples);
+      this.audioPeak = event.data.peak;
+      if (!this.micEnabled || this.muted || !this.socket.isOpen) return;
+      const pcm = new Int16Array(samples.length);
+      for (let i = 0; i < samples.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+      if (this.socket.send(encodePcmChunk(event.data.timestamp, pcm))) this.audioPacketsSent++;
+    };
+    const audioConfigPacket = encodeJsonPacket(PACKET.AUDIO_CONFIG, {
+      decoderConfig: { codec: 'pcm-s16le', sampleRate: this.audioContext.sampleRate, numberOfChannels: 1 },
+      sampleRate: this.audioContext.sampleRate,
+      channels: 1,
+      bitsPerSample: 16,
+    });
+    this.lastAudioConfigPacket = audioConfigPacket;
+    this.socket.send(audioConfigPacket);
+    this.micEnabled = true;
+    await this.ensureAudioRunning();
   }
 
   /**
@@ -1961,10 +1961,7 @@ class CameraSender {
 
   private setMute(muted: boolean): void {
     this.muted = this.micEnabled && muted;
-    const button = $('mute');
-    button.classList.toggle('active', this.muted);
-    button.setAttribute('aria-pressed', String(this.muted));
-    button.textContent = this.muted ? 'Muted' : 'Mute';
+    this.updateMicUi();
     this.sendState();
   }
 
@@ -1978,7 +1975,7 @@ class CameraSender {
       this.socket.sendControl('pong', { id: message.id });
     } else if (message.type === 'hello' || message.type === 'transport') {
       this.transport = String(message.transport || 'Unknown');
-      $('transport').textContent = this.transport.toUpperCase();
+      $('transport').textContent = transportLabel(this.transport);
     } else if (message.type === 'command') {
       void this.handleRemoteCommand(message);
     }
@@ -2016,15 +2013,10 @@ class CameraSender {
       switch (command) {
         case 'set-lens': await this.switchCamera(String(message.deviceId)); break;
         case 'set-torch': await this.setTorch(Boolean(message.enabled)); break;
-        // Stream settings: one command for any combination (used by the PC settings dialog and profiles)…
+        // Every stream setting, alone or combined (studio settings, aspect buttons, profiles, health fixes).
         case 'set-encoding':
           await this.applySettings(sanitizeSettings(message.settings as Record<string, unknown> | undefined));
           break;
-        // …plus the original single-field commands, kept for compatibility.
-        case 'set-orientation': await this.applySettings({ orientation: message.orientation === 'portrait' ? 'portrait' : 'landscape' }); break;
-        case 'set-preset': await this.applySettings(sanitizeSettings({ preset: message.preset })); break;
-        case 'set-bitrate': await this.applySettings(sanitizeSettings({ bitrate: message.bitrate })); break;
-        case 'set-codec': await this.applySettings(sanitizeSettings({ codec: message.codec })); break;
         case 'set-mic': await this.setMicrophone(Boolean(message.enabled)); break;
         case 'set-mic-device':
           this.selectedMicrophone = String(message.deviceId || '');
@@ -2059,18 +2051,8 @@ class CameraSender {
     const activeProfile = matchingProfile(settings);
     $('profile-max-quality').classList.toggle('active', activeProfile === 'max-quality');
     $('profile-low-latency').classList.toggle('active', activeProfile === 'low-latency');
-    const micButton = $('mic');
-    micButton.classList.toggle('active', this.micEnabled);
-    micButton.setAttribute('aria-pressed', String(this.micEnabled));
-    micButton.textContent = this.micEnabled ? 'Mic on' : 'Mic off';
-    const muteButton = $<HTMLButtonElement>('mute');
-    const mutedActive = this.micEnabled && this.muted;
-    muteButton.classList.toggle('active', mutedActive);
-    muteButton.setAttribute('aria-pressed', String(mutedActive));
-    muteButton.textContent = mutedActive ? 'Muted' : 'Mute';
-    muteButton.disabled = !this.micEnabled;
+    this.updateMicUi();
     this.updateTorchUi();
-    $<HTMLSelectElement>('mic-device').disabled = !this.micEnabled;
     $<HTMLSelectElement>('mic-device').value = this.selectedMicrophone;
     $<HTMLSelectElement>('focus-mode').value = this.focusMode;
     $<HTMLSelectElement>('exposure-mode').value = this.exposureMode;
@@ -2140,14 +2122,13 @@ class CameraSender {
     const height = quarterTurn ? pixelWidth : pixelHeight;
     const queue = this.encoder?.encodeQueueSize || 0;
     const db = this.audioPeak > 0 ? 20 * Math.log10(this.audioPeak) : -Infinity;
-    this.displayedFps = fps;
     this.sentFrames = 0;
     this.sentBytes = 0;
     $('bitrate-live').textContent = `${mbps.toFixed(1)} Mbps`;
     $('resolution-live').textContent = width ? `${width}×${height}` : '—';
     $('fps-live').textContent = `${fps} FPS`;
-    $('queue-live').textContent = `Q${queue}`;
-    $('transport').textContent = this.socket.isOpen ? this.transport.toUpperCase() : 'OFFLINE';
+    $('queue-live').textContent = `queue ${queue}`;
+    $('transport').textContent = this.socket.isOpen ? transportLabel(this.transport) : 'Offline';
     $<HTMLElement>('audio-level').style.setProperty('--level', String(Math.min(1, this.audioPeak)));
     $('audio-db').textContent = Number.isFinite(db) ? `${db.toFixed(1)} dB` : '−∞ dB';
     this.audioPeak *= 0.6;
@@ -2177,7 +2158,7 @@ class CameraSender {
     } : null));
 
     this.socket.sendControl('sender-telemetry', {
-      fps: this.displayedFps,
+      fps,
       encodedMbps: mbps,
       encoderQueue: queue,
       droppedFrames: this.droppedFrames,

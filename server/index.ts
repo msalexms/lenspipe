@@ -1,6 +1,5 @@
 import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import websocket from '@fastify/websocket';
-import { createServer } from 'node:net';
 import { resolve, extname, sep } from 'node:path';
 import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -11,36 +10,33 @@ import { resolveAppPaths } from './paths.js';
 import { StreamRelay } from './relay.js';
 import { isLocalRequest, loadPairingToken, PAIRING_REQUIRED_CLOSE_CODE, tokenMatches } from './pairing.js';
 
-async function isPortAvailable(candidate: number, host = '0.0.0.0'): Promise<boolean> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const tester = createServer();
-    tester.once('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE' || error.code === 'EACCES') resolvePromise(false);
-      else rejectPromise(error);
-    });
-    tester.once('listening', () => {
-      tester.close((closeError) => {
-        if (closeError) rejectPromise(closeError);
-        else resolvePromise(true);
-      });
-    });
-    tester.listen({ port: candidate, host });
-  });
+/**
+ * Listens on `port`, or on the next free one (up to 10 tries) when it is busy. `skip` is a port this
+ * server already uses on another interface.
+ */
+async function listenOnFreePort(app: FastifyInstance, port: number, host: string, skip?: number): Promise<number> {
+  for (let attempt = 0; ; attempt++) {
+    if (port === skip) port++;
+    try {
+      await app.listen({ port, host });
+      return port;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code !== 'EADDRINUSE' && code !== 'EACCES') || attempt >= 9 || port >= 65535) throw error;
+      port++;
+    }
+  }
 }
 
-async function findAvailablePort(
-  startPort: number,
-  maxAttempts = 10,
-  host = '0.0.0.0',
-  excludePort?: number,
-): Promise<number> {
-  for (let offset = 0; offset < maxAttempts; offset++) {
-    const candidate = startPort + offset;
-    if (candidate > 65535) break;
-    if (candidate === excludePort) continue;
-    if (await isPortAvailable(candidate, host)) return candidate;
+/** The request's Origin is this server. A missing Origin passes unless `required` (non-browser clients send none). */
+function isSameOrigin(request: FastifyRequest, required = false): boolean {
+  const origin = request.headers.origin;
+  if (!origin) return !required;
+  try {
+    return new URL(origin).host === request.headers.host;
+  } catch {
+    return false;
   }
-  return startPort === excludePort && startPort < 65535 ? startPort + 1 : startPort;
 }
 
 const MIME: Record<string, string> = {
@@ -61,7 +57,7 @@ const MAX_DIAGNOSTIC_REPORTS = 50;
  * same-origin, no other site may frame the studio or the OBS view (OBS itself loads /obs as a
  * top-level browser source, not a frame), and responses are never sniffed into another content
  * type. `connect-src 'self'` covers the same-origin WebSocket (wss is the https scheme upgrade).
- * /obs alone carries an inline <style>, so its CSP adds 'unsafe-inline' to style-src.
+ * No page uses inline <style> or <script>: keep it that way, or the browser drops them silently.
  */
 const CSP = [
   "default-src 'self'",
@@ -81,7 +77,7 @@ const CSP = [
 async function main(): Promise<void> {
   const paths = resolveAppPaths();
   const requestedPort = Number(process.env.PORT || 8443);
-  let port = await findAvailablePort(requestedPort);
+  let port = requestedPort;
   const dist = paths.distDir;
   const network = new NetworkScanner(port);
   network.start();
@@ -111,10 +107,16 @@ async function main(): Promise<void> {
     }
   }
 
-  /** This PC (see isLocalRequest), or a device presenting the pairing key in `x-pairing-key`. */
-  function isPairedHttp(request: FastifyRequest): boolean {
-    return isLocalRequest(request.socket.remoteAddress, request.headers)
-      || tokenMatches(request.headers['x-pairing-key'], pairingToken);
+  const isLocal = (request: FastifyRequest) => isLocalRequest(request.socket.remoteAddress, request.headers);
+
+  /**
+   * This PC (see isLocalRequest), or a device presenting the pairing key: pages send it in `x-pairing-key`,
+   * WebSockets (which cannot carry custom headers) in `?k=`.
+   */
+  function isPaired(request: FastifyRequest): boolean {
+    return isLocal(request)
+      || tokenMatches(request.headers['x-pairing-key'], pairingToken)
+      || tokenMatches((request.query as Record<string, unknown>).k, pairingToken);
   }
 
   /**
@@ -124,41 +126,26 @@ async function main(): Promise<void> {
    * clients (the test scripts) send no Origin and are unaffected.
    */
   const sameOriginOnly = async (request: FastifyRequest, reply: FastifyReply) => {
-    const origin = request.headers.origin;
-    if (!origin) return;
-    try {
-      if (new URL(origin).host === request.headers.host) return;
-    } catch { /* malformed Origin: reject below */ }
-    request.log.warn({ origin }, 'Rejected cross-origin WebSocket');
+    if (isSameOrigin(request)) return;
+    request.log.warn({ origin: request.headers.origin }, 'Rejected cross-origin WebSocket');
     return reply.code(403).send();
   };
 
-  /** This PC is always trusted; any other device must present the pairing key (`?k=`). */
-  function isPaired(request: FastifyRequest): boolean {
-    if (isLocalRequest(request.socket.remoteAddress, request.headers)) return true;
-    return tokenMatches((request.query as Record<string, unknown>).k, pairingToken);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // `any`: the same routes serve the HTTPS app and the plain-HTTP loopback app, whose server types differ.
   async function registerRoutes(instance: FastifyInstance<any, any, any, any>, localOnly: boolean): Promise<void> {
     await instance.register(websocket, { options: { maxPayload: MAX_WS_PAYLOAD_BYTES } });
 
     if (localOnly) {
       // Loopback HTTP listener is strictly for local WebView / local OBS Studio (defeats DNS rebinding).
       instance.addHook('onRequest', async (request, reply) => {
-        if (!isLocalRequest(request.socket.remoteAddress, request.headers)) {
-          return reply.code(403).send();
-        }
+        if (!isLocal(request)) return reply.code(403).send();
       });
     }
 
     instance.get('/', async (_request, reply) => reply.redirect('/control'));
 
-    instance.addHook('onSend', async (request, reply) => {
-      const csp = request.url.startsWith('/obs')
-        ? CSP.replace("style-src 'self'", "style-src 'self' 'unsafe-inline'")
-        : CSP;
-      reply.header('Content-Security-Policy', csp);
+    instance.addHook('onSend', async (_request, reply) => {
+      reply.header('Content-Security-Policy', CSP);
       reply.header('X-Content-Type-Options', 'nosniff');
       reply.header('Referrer-Policy', 'no-referrer');
       reply.header('X-Frame-Options', 'SAMEORIGIN');
@@ -172,8 +159,8 @@ async function main(): Promise<void> {
     // Network details (interface names, addresses, firewall commands) are for paired devices only, and the
     // pairing key itself only for pages opened on this PC, which put it in the QR codes and the OBS URL.
     instance.get('/api/network', async (request, reply) => {
-      if (!isPairedHttp(request)) return reply.code(401).send();
-      return isLocalRequest(request.socket.remoteAddress, request.headers)
+      if (!isPaired(request)) return reply.code(401).send();
+      return isLocal(request)
         ? {
             ...network.snapshot,
             pairingToken,
@@ -185,28 +172,25 @@ async function main(): Promise<void> {
         : network.snapshot;
     });
 
-    instance.get('/api/health', async () => ({
+    // Other devices only learn that the server is up; ports and platform are for this PC.
+    instance.get('/api/health', async (request) => (isLocal(request) ? {
       ok: true,
       port,
       httpPort: localHttpPort,
       desktop: paths.desktop,
       platform: process.platform,
-    }));
+    } : { ok: true }));
 
     instance.get('/api/obs/cert-trust', async (request, reply) => {
-      if (!isLocalRequest(request.socket.remoteAddress, request.headers)) return reply.code(403).send();
+      if (!isLocal(request)) return reply.code(403).send();
       return checkCertificateTrust(certFilePath, certificate.cert);
     });
 
     instance.post('/api/obs/cert-trust', async (request, reply) => {
-      if (!isLocalRequest(request.socket.remoteAddress, request.headers)) return reply.code(403).send();
-      const origin = request.headers.origin;
-      try {
-        if (!origin || new URL(origin).host !== request.headers.host) return reply.code(403).send();
-      } catch {
+      // Installs a root certificate: only a page served here, on this PC, may ask (the custom header forces a CORS preflight).
+      if (!isLocal(request) || !isSameOrigin(request, true) || request.headers['x-lenspipe-action'] !== 'trust-cert') {
         return reply.code(403).send();
       }
-      if (request.headers['x-lenspipe-action'] !== 'trust-cert') return reply.code(403).send();
       if (!pendingCertTrust) {
         pendingCertTrust = installCertificateTrust(certFilePath, certificate.cert).finally(() => {
           pendingCertTrust = null;
@@ -217,13 +201,8 @@ async function main(): Promise<void> {
 
     /** Camera-format diagnostics from /diag on the iPhone, saved to diagnostics/ for troubleshooting. */
     instance.post('/api/diagnostics', { bodyLimit: 512 * 1024 }, async (request, reply) => {
-      if (!isPairedHttp(request)) return reply.code(401).send();
-      const origin = request.headers.origin;
-      try {
-        if (origin && new URL(origin).host !== request.headers.host) return reply.code(403).send();
-      } catch {
-        return reply.code(403).send();
-      }
+      if (!isPaired(request)) return reply.code(401).send();
+      if (!isSameOrigin(request)) return reply.code(403).send();
       const directory = paths.diagnosticsDir;
       await mkdir(directory, { recursive: true });
       // Bounded, so even a paired device cannot fill the disk with reports.
@@ -277,44 +256,17 @@ async function main(): Promise<void> {
     process.stdin.once('close', () => { void shutdown(); });
   }
 
-  for (let attempt = 0; attempt < 10; attempt++) {
-    try {
-      await app.listen({ port, host: '0.0.0.0' });
-      break;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if ((code === 'EADDRINUSE' || code === 'EACCES') && attempt < 9 && port < 65535) {
-        port++;
-        network.setPort(port);
-        continue;
-      }
-      throw error;
-    }
-  }
+  port = await listenOnFreePort(app, requestedPort, '0.0.0.0');
+  network.setPort(port);
 
   if (paths.desktop || process.env.LENSPIPE_LOCAL_HTTP === '1') {
-    const requestedHttpPort = Number(process.env.LOCAL_HTTP_PORT || port + 1);
-    localHttpPort = await findAvailablePort(requestedHttpPort, 10, '127.0.0.1', port);
     const plainApp = Fastify({
       logger: { level: process.env.LOG_LEVEL || 'info' },
       logController: new LogController({ disableRequestLogging: true }),
     });
     await registerRoutes(plainApp, true);
-    for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        if (localHttpPort === port && localHttpPort < 65535) localHttpPort++;
-        await plainApp.listen({ port: localHttpPort, host: '127.0.0.1' });
-        httpApp = plainApp;
-        break;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if ((code === 'EADDRINUSE' || code === 'EACCES') && attempt < 9 && localHttpPort < 65535) {
-          localHttpPort++;
-          continue;
-        }
-        throw error;
-      }
-    }
+    localHttpPort = await listenOnFreePort(plainApp, Number(process.env.LOCAL_HTTP_PORT || port + 1), '127.0.0.1', port);
+    httpApp = plainApp;
   }
 
   console.log(`\n${certificate.generated ? 'Generated' : 'Using'} local TLS certificate: ${certificate.directory}`);
